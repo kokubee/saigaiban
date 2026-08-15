@@ -10,6 +10,7 @@ P0読み取り専用追補: `9501d27`（既知値検証、OFF時文言、外部�
 P0 Turnstile追補: `15ad074`（siteverify、失敗時停止、フォームwidget、検証テスト）
 P0 HMAC追補: `889fbda`（日次ローテーションHMAC、24時間識別子保持、定期削除）
 P0 cache追補: `57d3245`（shadow書込、origin応答、ETag／Last-Modified保持、差分ログ）
+P0 moderation／request追補: `c6b655e`（通報・非表示・管理者確認、本文上限、Turnstile厳格検証、CFヘッダ、fetch timeout）
 
 ## 1. P-1の判定
 
@@ -81,7 +82,7 @@ P0ではこのprojectionを追加し、「店側が入力した」ことと「�
 | IP識別子 | 日次HMACを`ip_hash`へ保存し、24時間超でNULL化 | cron実行とsecret設定を確認 |
 | owner判定 | フォーム値を自己申告として保存 | 認証済み所有者と表示しない |
 | 内容制限 | URL、電話、連絡先、待ち合わせ等を拒否 | 既存テストを維持・拡張 |
-| 通報・非表示 | 現行の公開POSTには未実装 | 投稿再開前に管理経路を用意 |
+| 通報・非表示 | `0003_moderation.sql`、`/api/reports/:id/flag`、`/api/admin/reports/:id/moderate`を実装 | migration適用、実D1の監査確認、管理secret設定 |
 
 P2では、`observedAt` と `confirmedAt` を同一時刻に自動設定しない。既存行は `created_at` を観測・投稿時刻の暫定値とし、確認時刻は別に扱う移行規則を決める。
 
@@ -94,7 +95,7 @@ P2では、`observedAt` と `confirmedAt` を同一時刻に自動設定しな�
 - 場所詳細POSTは書き込み後にリダイレクトし、成功表示をクエリで返す
 - OpenNavi依存のCache APIは `PUBLIC_READ_CACHE=off` が既定
 - `shadow` はoriginを返しながらcacheへ書き、既存cacheとの差分を測定する。ETag／Last-Modifiedもcacheへ保持する
-- OpenNavi依存fetchにETag、timeout、再試行上限はない
+- OpenNavi依存fetchは5秒timeout、1MB上限、不正cacheのoriginフォールバックを実装済み。再試行はしない
 
 ### OpenNaviとの境界
 
@@ -118,6 +119,9 @@ P0実装時に、最低限次のテストを追加する。
 10. telemetryがallowlist外のキー、未知の地域・カテゴリ・need・kind・verdict、本文を送信しない
 11. 投稿OFFのPOSTがOpenNavi取得とD1書込みの前に拒否される
 12. 日次HMACが日付をまたいでローテーションし、24時間超の`ip_hash`がNULL化される
+13. 本文Content-Length・Content-Type上限が`formData()`前に適用される
+14. Turnstileのtoken長、action、hostname、timeout、非2xx、不正JSONがすべて拒否される
+15. 通報・管理操作が理由／操作allowlistと認証を通り、非表示行が公開一覧から除かれる
 
 ## 7. P-1で変更しないもの
 
@@ -127,4 +131,4 @@ P0実装時に、最低限次のテストを追加する。
 - 外部支援・旅行プロバイダへの送信
 - 投稿受付の再開
 
-P-1のベースラインをもとに、P0追補では投稿受付を既定OFFに固定した。`PUBLIC_POSTING_MODE=on` は、write ownershipの承認とTurnstile・短期HMAC・保持期限・管理経路の実装後に限って有効化する。OpenNavi側の変更はこのリポジトリへ混ぜない。
+P-1のベースラインをもとに、P0追補では投稿受付を既定OFFに固定した。`PUBLIC_POSTING_MODE=on` は、write ownershipの承認、D1 migration適用後の実DB確認、Turnstile・短期HMAC・保持期限・moderation監査の運用確認後に限って有効化する。OpenNavi側の変更はこのリポジトリへ混ぜない。

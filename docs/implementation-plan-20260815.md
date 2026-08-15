@@ -3,7 +3,7 @@
 作成日: 2026-08-15／レビュー反映: 2026-08-16
 対象リポジトリ: `/Users/kokubee/code2026/saigaiban`  
 基準コミット: `382b1b7 feat: separate disaster board support navigation`  
-状態: 条件付き承認。P-1（現行実装との差分固定）は `docs/implementation-baseline-20260816.md` に記録済み。P0は証拠・鮮度projection、値検証付きテレメトリallowlist、既定OFFの投稿受付ゲート、読み取り専用表示、外部取得前のPOST拒否、fail-closedなTurnstileサーバー検証、短期HMACと識別子保持期限処理、shadowキャッシュ契約まで実装済み。write ownershipの承認、Turnstile/HMAC秘密の本番設定が残る。コード変更・D1変更・デプロイは、各フェーズの受入条件を確認してから行う。
+状態: 条件付き承認。P-1（現行実装との差分固定）は `docs/implementation-baseline-20260816.md` に記録済み。P0は証拠・鮮度projection、値検証付きテレメトリallowlist、既定OFFの投稿受付ゲート、読み取り専用表示、外部取得前のPOST拒否、fail-closedなTurnstileサーバー検証、短期HMACと識別子保持期限処理、shadowキャッシュ契約、通報・非表示・管理者確認経路まで実装済み。write ownershipの承認、D1 migration適用、Turnstile/HMAC秘密の本番設定、実DBでのcron確認が残る。コード変更・D1変更・デプロイは、各フェーズの受入条件を確認してから行う。
 
 ## 1. 災害板の役割
 
@@ -56,7 +56,7 @@ P-1では、計画の各項目を `実装済み` / `部分実装` / `未実装` 
 | オフライン地域スナップショット | 災害板には未実装 | 未実装 | shellとデータ保存の責務を分離して設計 |
 | 公式・住民・鮮度の3軸 | 災害板の表示ラベルは単軸 | 部分実装 | P0でprojection契約を定義 |
 | 地域全体の停電・断水報告 | `place_id`前提のため未実装 | 未実装 | `lifeline_reports`を別設計。既存reportsへ混在させない |
-| 管理者actor監査 | 災害板は未実装、OpenNaviは共有ADMIN_TOKEN | OpenNavi依存 | 投稿再開・収束の前提条件として別途解消 |
+| 管理者actor監査 | 災害板は`moderation_audit`と固定actor IDを実装、OpenNaviは共有ADMIN_TOKEN | 部分実装／OpenNavi依存 | D1 migration適用とOpenNavi側の別承認を確認 |
 | LINE自由文の外部AI分類 | 災害板にはない | OpenNavi依存 | 災害モードでは恒久的に無効化する契約を確認 |
 
 P-1の成果物は、差分表、依存API契約、移行対象データ、変更しない範囲、テストケース一覧である。P-1完了前にUI・D1・投稿受付を変更しない。
@@ -149,7 +149,7 @@ freshness: "fresh" | "stale" | "expired" | "unknown"
 
 ### 5.3 投稿制御
 
-- Origin確認、短時間クールダウン、Turnstile等のbot対策を投稿再開の必須条件にする。現行POSTにはTurnstile検証がないため、再開前に追加する
+- Origin確認、短時間クールダウン、Turnstile等のbot対策を投稿再開の必須条件にする。Turnstileは実装済みだが、secret/site key設定と実検証確認が済むまで受付を開けない
 - IP由来の固定SHA-256を監査識別子として長期保存しない。クールダウン用は秘密鍵付きHMAC＋期間salt等の短期トークンにし、目的を終えたら削除する
 - 投稿停止、確認のみ、通常受付を環境・地域単位で切替可能にする
 - 通報・非表示・管理者確認の経路を追加する
@@ -214,6 +214,7 @@ lifeline_reports
 - `authority / review / freshness` から表示ラベルを導出
 - 住民報告・店側自己申告・OpenNavi公式リンク・参照台帳を別ラベル化
 - `area_open / need_select / official_open / report_submit / zero_result` を型付きallowlistで匿名計測
+- telemetryは現在sanitize helperとテストまでで、カスタムイベント送信経路は未配線。配線時もsanitizeTelemetryを必須にする
 - `time_to_first_action_ms` を利用者識別なしで計測可能にする
 - 公開投稿は `PUBLIC_POSTING_MODE=off` を既定値とし、off時はフォームを出さずPOSTも受け付けない
 - telemetryの地域slug（実在area集合との照合）・既知カテゴリ・need・kind・verdict・経過時間を値レベルで検証し、自由文を破棄する
@@ -221,12 +222,15 @@ lifeline_reports
 - 店側自己申告カードにもauthority・review・freshnessのラベルを表示する
 - 投稿OFF時は市区町村・場所詳細を「これまでの報告を見る」へ切り替え、POSTはOpenNavi・D1へ触れる前に拒否する
 - Turnstileはサーバー側siteverifyを必須にし、秘密鍵・site keyの欠落、検証失敗、検証API障害をすべて受付停止として扱う
+- Turnstile tokenは2048文字以下、action=`report_submit`、本番hostname allowlist、5秒timeoutを検証する
+- 投稿本文はContent-Typeをurlencodedに限定し、Content-Length必須・8KB以下を`formData()`前に検査する。CF-Connecting-IP欠落時は投稿を拒否する
+- 通報（`POST /api/reports/:id/flag`）、非表示・確認（`POST /api/admin/reports/:id/moderate`）、監査ログを別migrationで提供する
 - WebレスポンスにOpenNaviの内部キーや非公開フィールドが混入しないテストを追加
 - 災害モードではLINEの外部AI classifierを恒久的に呼ばない契約をOpenNavi側と確認
 
 受入条件: 現行の投稿制約を壊さず、既存テストを通過し、代表カードのauthority・review・freshness・時刻・出典が一貫する。
 
-P0残作業は、write ownershipの文書承認（OpenNavi側は別リポジトリ・別承認）と、Turnstile/HMAC秘密の安全な設定確認である。投稿受付を `on` に変更するデプロイは、両項の受入条件を満たすまで行わない。
+P0残作業は、write ownershipの文書承認（OpenNavi側は別リポジトリ・別承認）、D1 migration適用後の実DB確認、Turnstile/HMAC秘密の安全な設定確認である。投稿受付を `on` に変更するデプロイは、全項の受入条件を満たすまで行わない。
 
 ### P1 — 被災者向け画面整理
 
@@ -248,7 +252,7 @@ P0残作業は、write ownershipの文書承認（OpenNavi側は別リポジト�
 - 24〜72時間のstale表示
 - 「今もそう」「変わった」「復旧した」を短い選択肢で操作
 - 投稿後に個人情報・連絡先を含まないことを再検査
-- クールダウン、Turnstile、通報、非表示、管理者確認のテスト
+- [P0実装済み] クールダウン、Turnstile、通報、非表示、管理者確認の経路を追加。実D1でのmigration・監査確認は投稿再開前に行う
 - [P0実装済み] IP由来固定ハッシュを日次ローテーションHMACへ移行し、保持期限を過ぎた識別子を定期的にNULL化
 - `role=owner` を自己申告と表示し、認証済み所有者と誤認させない
 - OpenNavi `/lifelines` の既存行は `observedAt` と `confirmedAt` を分けて移行する
