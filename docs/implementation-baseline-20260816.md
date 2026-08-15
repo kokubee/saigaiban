@@ -10,7 +10,7 @@ P0読み取り専用追補: `9501d27`（既知値検証、OFF時文言、外部�
 P0 Turnstile追補: `15ad074`（siteverify、失敗時停止、フォームwidget、検証テスト）
 P0 HMAC追補: `889fbda`（日次ローテーションHMAC、24時間識別子保持、定期削除）
 P0 cache追補: `57d3245`（shadow書込、origin応答、ETag／Last-Modified保持、差分ログ）
-P0 moderation／request追補: 次コミット（通報・非表示・管理者確認、本文上限、Turnstile厳格検証、CFヘッダ、fetch timeout）
+P0 moderation／request追補: `9e60dda`（公開／レビュー状態の独立更新、D1 batch監査、通報UIゲート、本文上限、Turnstile厳格検証、CFヘッダ、fetch timeout、日時比較、303復帰）
 
 ## 1. P-1の判定
 
