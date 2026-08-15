@@ -1,6 +1,8 @@
-import type { PlaceSummary, Report, Verdict } from "./types.ts";
+import type { PlaceSummary, Report, ReportRole, Verdict } from "./types.ts";
 
-export const VERDICTS: Verdict[] = ["open", "limited", "closed", "still", "changed"];
+export const VERDICTS: Verdict[] = ["open", "limited", "closed", "still", "changed", "maps"];
+
+export const VISITOR_VERDICTS: Verdict[] = ["open", "limited", "closed", "still", "changed"];
 
 export const VERDICT_LABEL: Record<Verdict, string> = {
   open: "使えていた",
@@ -8,6 +10,7 @@ export const VERDICT_LABEL: Record<Verdict, string> = {
   closed: "使えなかった",
   still: "前回と同じだった",
   changed: "変わっていた",
+  maps: "Googleマップを見てほしい",
 };
 
 const NOTE_MAX = 80;
@@ -15,6 +18,23 @@ const NOTE_MAX = 80;
 export function parseVerdict(raw: unknown): Verdict | null {
   const value = String(raw || "").trim();
   return (VERDICTS as string[]).includes(value) ? (value as Verdict) : null;
+}
+
+export function parseRole(raw: unknown): ReportRole {
+  return String(raw || "").trim() === "owner" ? "owner" : "visitor";
+}
+
+export function wantsMaps(raw: unknown): boolean {
+  const value = String(raw || "").trim().toLowerCase();
+  return value === "1" || value === "on" || value === "true";
+}
+
+function asReport(row: Report & { prefer_maps?: number | boolean; role?: string }): Report {
+  return {
+    ...row,
+    role: row.role === "owner" ? "owner" : "visitor",
+    prefer_maps: Boolean(row.prefer_maps),
+  };
 }
 
 export function cleanNote(raw: unknown): { note: string | null; error?: string } {
@@ -51,6 +71,35 @@ export async function hashIp(ip: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+export function resolvePost(input: {
+  roleRaw: unknown;
+  verdictRaw: unknown;
+  preferMapsRaw: unknown;
+  hasMapsUrl: boolean;
+  shopLike: boolean;
+}): { role: ReportRole; verdict: Verdict; preferMaps: boolean; error?: string } {
+  const role = parseRole(input.roleRaw);
+  const preferMaps = role === "owner" && wantsMaps(input.preferMapsRaw);
+  let verdict = parseVerdict(input.verdictRaw);
+  if (role === "owner" && !input.shopLike) {
+    return { role, verdict: "open", preferMaps: false, error: "店・施設のカードだけ、店側として書けます。" };
+  }
+  if (preferMaps && !input.hasMapsUrl) {
+    return { role, verdict: "maps", preferMaps: false, error: "この場所には地図リンクがありません。" };
+  }
+  if (role === "visitor" && verdict === "maps") {
+    return { role, verdict: "open", preferMaps: false, error: "見かけた人は、見たときの様子を選んでください。" };
+  }
+  if (!verdict && preferMaps) verdict = "maps";
+  if (!verdict) {
+    return { role, verdict: "open", preferMaps: false, error: "いまどうだったかを選んでください。" };
+  }
+  if (role === "visitor" && !VISITOR_VERDICTS.includes(verdict)) {
+    return { role, verdict, preferMaps: false, error: "いまどうだったかを選んでください。" };
+  }
+  return { role, verdict, preferMaps };
+}
+
 export async function insertReport(
   db: D1Database,
   args: {
@@ -60,6 +109,8 @@ export async function insertReport(
     verdict: Verdict;
     note: string | null;
     ipHash: string;
+    role: ReportRole;
+    preferMaps: boolean;
   },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const recent = await db
@@ -78,8 +129,8 @@ export async function insertReport(
   }
   await db
     .prepare(
-      `INSERT INTO reports (id, place_id, area, seed_key, verdict, note, created_at, ip_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO reports (id, place_id, area, seed_key, verdict, note, created_at, ip_hash, role, prefer_maps)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       crypto.randomUUID(),
@@ -90,6 +141,8 @@ export async function insertReport(
       args.note,
       new Date().toISOString(),
       args.ipHash,
+      args.role,
+      args.preferMaps ? 1 : 0,
     )
     .run();
   return { ok: true };
@@ -102,18 +155,20 @@ export async function latestByPlaces(db: D1Database, placeIds: string[]): Promis
   const marks = chunk.map(() => "?").join(", ");
   const { results } = await db
     .prepare(
-      `SELECT id, place_id, area, seed_key, verdict, note, created_at
+      `SELECT id, place_id, area, seed_key, verdict, note, created_at, role, prefer_maps
          FROM reports WHERE place_id IN (${marks})
          ORDER BY created_at DESC`,
     )
     .bind(...chunk)
     .all<Report>();
   const counts = new Map<string, number>();
-  for (const row of results || []) {
+  for (const raw of results || []) {
+    const row = asReport(raw);
     counts.set(row.place_id, (counts.get(row.place_id) || 0) + 1);
-    if (!out.has(row.place_id)) {
-      out.set(row.place_id, { latest: row, count: 0 });
-    }
+    const current = out.get(row.place_id) || { latest: null, latestOwner: null, count: 0 };
+    if (!current.latest) current.latest = row;
+    if (row.role === "owner" && !current.latestOwner) current.latestOwner = row;
+    out.set(row.place_id, current);
   }
   for (const [id, summary] of out) {
     summary.count = counts.get(id) || 0;
@@ -124,13 +179,13 @@ export async function latestByPlaces(db: D1Database, placeIds: string[]): Promis
 export async function listReports(db: D1Database, placeId: string, limit = 20): Promise<Report[]> {
   const { results } = await db
     .prepare(
-      `SELECT id, place_id, area, seed_key, verdict, note, created_at
+      `SELECT id, place_id, area, seed_key, verdict, note, created_at, role, prefer_maps
          FROM reports WHERE place_id = ?
          ORDER BY created_at DESC LIMIT ?`,
     )
     .bind(placeId, limit)
     .all<Report>();
-  return results || [];
+  return (results || []).map(asReport);
 }
 
 export function formatWhen(iso: string): string {

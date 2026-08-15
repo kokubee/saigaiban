@@ -15,8 +15,9 @@ import {
   insertReport,
   latestByPlaces,
   listReports,
-  parseVerdict,
+  resolvePost,
 } from "./reports.ts";
+import { isShopLike } from "./labels.ts";
 import type { BoardPlace, Env } from "./types.ts";
 
 export default {
@@ -96,8 +97,14 @@ async function handlePost(
     return redirect(site, dest, "この画面から送ってください。");
   }
   const form = await request.formData();
-  const verdict = parseVerdict(form.get("verdict"));
-  if (!verdict) return redirect(site, dest, "いまどうだったかを選んでください。");
+  const decided = resolvePost({
+    roleRaw: form.get("role"),
+    verdictRaw: form.get("verdict"),
+    preferMapsRaw: form.get("prefer_maps"),
+    hasMapsUrl: Boolean(place.maps_url),
+    shopLike: isShopLike(place.category),
+  });
+  if (decided.error) return redirect(site, dest, decided.error);
   const cleaned = cleanNote(form.get("note"));
   if (cleaned.error) return redirect(site, dest, cleaned.error);
   const ip = request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For") || "unknown";
@@ -105,9 +112,11 @@ async function handlePost(
     placeId: place.id,
     area: slug,
     seedKey: place.seed_key,
-    verdict,
+    verdict: decided.verdict,
     note: cleaned.note,
     ipHash: await hashIp(ip),
+    role: decided.role,
+    preferMaps: decided.preferMaps,
   });
   if (!saved.ok) return redirect(site, dest, saved.error);
   return Response.redirect(`${site}${dest}?ok=1`, 303);

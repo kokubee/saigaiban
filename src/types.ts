@@ -26,7 +26,9 @@ export type BoardPlacesPage = {
   places: BoardPlace[];
 };
 
-export type Verdict = "open" | "limited" | "closed" | "still" | "changed";
+export type Verdict = "open" | "limited" | "closed" | "still" | "changed" | "maps";
+
+export type ReportRole = "visitor" | "owner";
 
 export type Report = {
   id: string;
@@ -36,10 +38,13 @@ export type Report = {
   verdict: Verdict;
   note: string | null;
   created_at: string;
+  role: ReportRole;
+  prefer_maps: boolean;
 };
 
 export type PlaceSummary = {
   latest: Report | null;
+  latestOwner: Report | null;
   count: number;
 };
 

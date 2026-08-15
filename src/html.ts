@@ -1,6 +1,6 @@
-import { categoryLabel, isShelter, prefName } from "./labels.ts";
+import { categoryLabel, isShelter, isShopLike, prefName } from "./labels.ts";
 import { officialHubUrl, officialSupportUrl } from "./opennavi.ts";
-import { VERDICT_LABEL, VERDICTS, formatWhen } from "./reports.ts";
+import { VERDICT_LABEL, VISITOR_VERDICTS, formatWhen } from "./reports.ts";
 import type { BoardMeta, BoardPlace, PlaceSummary, Report } from "./types.ts";
 
 export function escapeHtml(value: unknown): string {
@@ -28,6 +28,8 @@ form{margin:16px 0}
 label{display:block;margin:10px 0 4px;font-weight:700}
 select,textarea,button{font:inherit}
 select,textarea{width:100%;max-width:28rem;padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.check{display:flex;gap:8px;align-items:flex-start;margin:10px 0;font-weight:400}
+.owner{background:#fff4e8;border:1px solid #e8c8a0;border-radius:8px;padding:10px 12px;margin:10px 0}
 textarea{min-height:4.5rem}
 button{background:var(--accent);color:#fff8ee;border:0;border-radius:8px;padding:8px 16px;margin-top:10px}
 .flash{background:#fff3d6;border:1px solid #e0c48a;padding:10px 12px;border-radius:8px}
@@ -140,23 +142,36 @@ export function renderTown(
 }
 
 function renderCard(slug: string, place: BoardPlace, summary?: PlaceSummary): string {
+  const owner = summary?.latestOwner;
   const latest = summary?.latest;
-  const tag = latest
-    ? `<span class="tag">投稿 ${escapeHtml(VERDICT_LABEL[latest.verdict])}</span>`
-    : `<span class="tag">未確認</span>`;
-  const latestLine = latest
-    ? `<p class="note">いちばん新しい投稿: ${escapeHtml(VERDICT_LABEL[latest.verdict])}（${escapeHtml(formatWhen(latest.created_at))}・公式ではない）</p>`
-    : `<p class="note">まだ投稿はありません。</p>`;
+  const steerMaps = Boolean(owner && (owner.prefer_maps || owner.verdict === "maps") && place.maps_url);
+  const tag = steerMaps
+    ? `<span class="tag">店側 地図へ</span>`
+    : owner
+      ? `<span class="tag">店側 ${escapeHtml(VERDICT_LABEL[owner.verdict])}</span>`
+      : latest
+        ? `<span class="tag">投稿 ${escapeHtml(VERDICT_LABEL[latest.verdict])}</span>`
+        : `<span class="tag">未確認</span>`;
+  const ownerLine = owner
+    ? steerMaps
+      ? `<div class="owner"><p>店側は、営業を Google マップの情報へ寄せています。自己申告で、公式確認ではありません。</p><p><a href="${escapeHtml(place.maps_url)}" rel="noopener">Googleマップの営業情報を見る</a></p></div>`
+      : `<p class="note">店側の自己申告: ${escapeHtml(VERDICT_LABEL[owner.verdict])}（${escapeHtml(formatWhen(owner.created_at))}・公式ではない）</p>`
+    : "";
+  const latestLine = !steerMaps && latest && latest.role !== "owner"
+    ? `<p class="note">見かけた人: ${escapeHtml(VERDICT_LABEL[latest.verdict])}（${escapeHtml(formatWhen(latest.created_at))}・公式ではない）</p>`
+    : !owner && !latest
+      ? `<p class="note">まだ投稿はありません。</p>`
+      : "";
   const shelter = isShelter(place.category)
     ? `<p class="note">指定場所の台帳です。いま開いている避難所とは限りません。</p>`
     : "";
-  const maps = place.maps_url
+  const maps = !steerMaps && place.maps_url
     ? `<a href="${escapeHtml(place.maps_url)}" rel="noopener">地図で見る</a>`
     : "";
   const addr = place.address ? `<p class="note">${escapeHtml(place.address)}</p>` : "";
   return `<article class="card">
     <h3>${tag}${escapeHtml(place.name)}</h3>
-    ${addr}${shelter}${latestLine}
+    ${addr}${shelter}${ownerLine}${latestLine}
     <p>${maps}${maps ? " ・ " : ""}<a href="/a/${escapeHtml(slug)}/p/${escapeHtml(place.id)}">いまどうかを書く</a></p>
   </article>`;
 }
@@ -172,7 +187,7 @@ export function renderPlace(
 ): string {
   const area = meta.areas.find((a) => a.slug === slug);
   const nameJa = area?.nameJa || slug;
-  const options = VERDICTS.map(
+  const options = VISITOR_VERDICTS.map(
     (v) => `<option value="${v}">${escapeHtml(VERDICT_LABEL[v])}</option>`,
   ).join("");
   const history =
@@ -180,16 +195,33 @@ export function renderPlace(
       ? `<p class="note">まだ投稿はありません。</p>`
       : `<ul>${reports
           .map((r) => {
+            const who = r.role === "owner" ? "店側" : "見かけた人";
             const note = r.note ? ` — ${escapeHtml(r.note)}` : "";
-            return `<li>${escapeHtml(formatWhen(r.created_at))}　${escapeHtml(VERDICT_LABEL[r.verdict])}${note}</li>`;
+            const maps = r.prefer_maps ? " / 地図へ寄せる" : "";
+            return `<li>${escapeHtml(formatWhen(r.created_at))}　${escapeHtml(who)}　${escapeHtml(VERDICT_LABEL[r.verdict])}${maps}${note}</li>`;
           })
           .join("")}</ul>`;
   const shelter = isShelter(place.category)
     ? `<p class="note">指定場所の台帳です。開設中かどうかは公式ハブで確認してください。</p>`
     : "";
   const maps = place.maps_url
-    ? `<p><a href="${escapeHtml(place.maps_url)}" rel="noopener">地図で見る</a></p>`
+    ? `<p><a href="${escapeHtml(place.maps_url)}" rel="noopener">Googleマップを見る</a></p>`
     : "";
+  const ownerFields = isShopLike(place.category)
+    ? `
+        <label for="role">どなたですか</label>
+        <select id="role" name="role">
+          <option value="visitor">見かけた人</option>
+          <option value="owner">自分の店・施設です</option>
+        </select>
+        ${
+          place.maps_url
+            ? `<label class="check"><input type="checkbox" name="prefer_maps" value="1"> 店側の場合、営業は Google マップの情報を見てほしい（自己申告）</label>`
+            : ""
+        }
+        <p class="note">店側の投稿も確認はしていません。Google マップの営業情報へ寄せることもできます。</p>
+      `
+    : `<input type="hidden" name="role" value="visitor">`;
   return page({
     title: `${place.name} — ${nameJa}の災害板`,
     description: `${place.name}のいまどうか。投稿は見た時点の話です。公式ではありません。`,
@@ -197,12 +229,13 @@ export function renderPlace(
     body: `
       <nav><a href="/">災害板</a><a href="/a/${escapeHtml(slug)}">${escapeHtml(nameJa)}</a><a href="${escapeHtml(officialHubUrl(origin, slug))}">公式ハブ</a></nav>
       <h1>${escapeHtml(place.name)}</h1>
-      <p class="lead">見たときの様子だけを書いてください。氏名・電話・待ち合わせは受けません。公式発表の代わりにはなりません。</p>
+      <p class="lead">見たときの様子、または店側の自己申告を書けます。氏名・電話・待ち合わせは受けません。公式発表の代わりにはなりません。</p>
       ${shelter}${maps}
       ${notice ? `<p class="flash">${escapeHtml(notice)}</p>` : ""}
       <form method="post" action="/a/${escapeHtml(slug)}/p/${escapeHtml(place.id)}">
+        ${ownerFields}
         <label for="verdict">いまどうだったか</label>
-        <select id="verdict" name="verdict" required>
+        <select id="verdict" name="verdict">
           <option value="">選んでください</option>
           ${options}
         </select>
@@ -227,7 +260,7 @@ export function renderAbout(site: string, origin: string): string {
       <h1>この板について</h1>
       <p class="lead">災害板は、場所ごとの「いまどうか」を書くための板です。自治体や社協の公式発表の代わりにはなりません。</p>
       <h2>すること</h2>
-      <p>OpenNavi が開いた町について、店や避難所などの場所カードを自動で立てます。最初は未確認です。見たときの様子を、場所に紐づけて投稿できます。</p>
+      <p>OpenNavi が開いた町について、店や避難所などの場所カードを自動で立てます。最初は未確認です。見かけた人も、店の人も書けます。店側は Google マップの営業情報へ寄せることもできます。どれも公式確認ではありません。</p>
       <h2>しないこと</h2>
       <ul>
         <li>公式窓口の代わりにはならない</li>

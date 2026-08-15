@@ -74,3 +74,7 @@ export function categoryLabel(id: string): string {
 export function isShelter(category: string): boolean {
   return category === "hinanjo";
 }
+
+export function isShopLike(category: string): boolean {
+  return ["conv", "super", "food", "gas", "laundry", "bath", "shop", "meal"].includes(category);
+}
