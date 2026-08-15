@@ -1,4 +1,4 @@
-import { CATEGORY_FILTERS, categoryLabel, isShelter, isShopLike, isKnownCategory, prefName } from "./labels.ts";
+import { CATEGORY_FILTERS, categoryDescription, categoryLabel, isShelter, isShopLike, isKnownCategory, prefName } from "./labels.ts";
 import { googleMapsSearchUrl } from "./maps.ts";
 import { officialHubUrl, officialSupportUrl, officialVictimUrl } from "./opennavi.ts";
 import { evidenceLabel } from "./evidence.ts";
@@ -53,6 +53,7 @@ nav a{margin-right:12px}
 .category-filters{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 14px}
 .category-filter{display:inline-block;border:1px solid var(--line);border-radius:999px;background:#fff;padding:6px 11px;text-decoration:none}
 .category-filter[aria-current="page"]{background:var(--accent);border-color:var(--accent);color:#fff8ee}
+.category-note{color:var(--muted);font-size:.88rem;margin:-4px 0 8px}
 .search-form{display:flex;gap:8px;max-width:36rem}
 .search-form input{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff}
 .search-form button{margin:0;white-space:nowrap}
@@ -216,7 +217,7 @@ export function renderTown(
         more > 0
           ? `<p class="note"><a href="/a/${escapeHtml(slug)}?${escapeHtml(queryString(cat))}&all=1">この種別をすべて見る（あと${more}件）</a></p>`
           : "";
-      return `<h2>${escapeHtml(categoryLabel(cat))}</h2><div class="cards">${cards}</div>${extra}`;
+      return `<h2>${escapeHtml(categoryLabel(cat))}</h2><p class="category-note">${escapeHtml(categoryDescription(cat))}</p><div class="cards">${cards}</div>${extra}`;
     })
     .join("");
   const tools = `<section class="town-tools" aria-labelledby="town-tools-title">

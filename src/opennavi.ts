@@ -1,5 +1,6 @@
 import type { BoardMeta, BoardPlace, BoardPlacesPage } from "./types.ts";
 import { getCachedJson, publicCacheMode, type PublicCacheMode } from "./cache.ts";
+import { normalizePlaceCategory } from "./labels.ts";
 
 export const DEFAULT_OPENNAVI = "https://opennavi.org";
 
@@ -49,7 +50,7 @@ export function stripPlace(raw: unknown): BoardPlace | null {
     seed_key: String(p.seed_key || ""),
     name,
     area,
-    category: String(p.category || ""),
+    category: normalizePlaceCategory(String(p.category || ""), name),
     lat: typeof p.lat === "number" && Number.isFinite(p.lat) ? p.lat : null,
     lng: typeof p.lng === "number" && Number.isFinite(p.lng) ? p.lng : null,
     address: p.address ? String(p.address) : null,

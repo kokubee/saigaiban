@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { getCachedJson, publicCacheMode } from "../src/cache.ts";
 import { evidenceLabel, freshnessFor, reportEvidence } from "../src/evidence.ts";
 import { escapeHtml, gaSnippet, renderHome, renderPlace, renderTown } from "../src/html.ts";
-import { categoryLabel, isShelter } from "../src/labels.ts";
+import { categoryDescription, categoryLabel, isShelter, normalizePlaceCategory } from "../src/labels.ts";
 import { googleMapsSearchUrl } from "../src/maps.ts";
 import { officialHubUrl, officialVictimUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
 import { cleanNote, flagReport, moderateReport, parseFlagReason, parseModerationAction, parseVerdict, resolvePost } from "../src/reports.ts";
@@ -401,6 +401,11 @@ test("stripPlace keeps identity only and drops empty rows", () => {
 
 test("labels", () => {
   assert.equal(categoryLabel("conv"), "コンビニ");
+  assert.equal(categoryLabel("hospital"), "病院・診療所");
+  assert.match(categoryDescription("hospital"), /病院・診療所/);
+  assert.equal(categoryLabel("unknown-source-tag"), "その他");
+  assert.equal(normalizePlaceCategory("hospital", "鈴木クリーニング"), "laundry");
+  assert.equal(normalizePlaceCategory("laundry", "おおあみ泌尿器科"), "hospital");
   assert.equal(isShelter("hinanjo"), true);
   assert.equal(isShelter("conv"), false);
 });

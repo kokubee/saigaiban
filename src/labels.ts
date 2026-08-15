@@ -61,6 +61,25 @@ const CATEGORY_LABELS: Record<string, string> = {
   shop: "店",
   food: "食事",
   meal: "食事",
+  hospital: "病院・診療所",
+  pharmacy: "薬局",
+};
+
+const CATEGORY_DESCRIPTIONS: Record<string, string> = {
+  hinanjo: "指定避難所・指定緊急避難場所の台帳。開設中とは限りません。",
+  hospital: "病院・診療所。診療時間や受診可否は公式案内で確認してください。",
+  pharmacy: "薬局。営業や在庫は公式案内・店舗へ確認してください。",
+  laundry: "クリーニング店・コインランドリー。",
+  gas: "給油所。営業や給油可否は現地・公式情報で確認してください。",
+  food: "飲食店・食事の場所。",
+  meal: "飲食店・食事の場所。",
+  conv: "コンビニエンスストア。",
+  super: "スーパー・食品店。",
+  water_spot: "給水所。開設状況は公式情報で確認してください。",
+  water: "水に関する場所・情報。",
+  toilet: "トイレ。利用可否は現地で確認してください。",
+  bath: "入浴施設。営業や利用可否は公式情報で確認してください。",
+  shop: "その他の店舗・サービス。",
 };
 
 export const CATEGORY_FILTERS: Array<{ id: string; label: string }> = [
@@ -76,18 +95,47 @@ export const CATEGORY_FILTERS: Array<{ id: string; label: string }> = [
   { id: "super", label: "スーパー" },
   { id: "shop", label: "店" },
   { id: "water", label: "水" },
+  { id: "hospital", label: "病院・診療所" },
+  { id: "pharmacy", label: "薬局" },
 ];
+
+const CATEGORY_ALIASES: Record<string, string> = {
+  clinic: "hospital",
+  medical: "hospital",
+  drugstore: "pharmacy",
+  drug_store: "pharmacy",
+  convenience: "conv",
+  fuel: "gas",
+  restaurant: "food",
+};
+
+const LAUNDRY_NAME = /(クリーニング|コインランドリー|ランドリー|洗濯)/iu;
+const MEDICAL_NAME = /(病院|医院|クリニック|診療所|内科|外科|歯科|眼科|整形|皮膚科|泌尿器科|耳鼻|産婦人科|小児科)/iu;
 
 export function prefName(code: string): string {
   return PREF_NAMES[code] || (code ? `都道府県(${code})` : "その他");
 }
 
 export function categoryLabel(id: string): string {
-  return CATEGORY_LABELS[id] || id;
+  return CATEGORY_LABELS[id] || "その他";
+}
+
+export function categoryDescription(id: string): string {
+  return CATEGORY_DESCRIPTIONS[id] || "場所の種類が特定できないカード。公式・現地で確認してください。";
 }
 
 export function isKnownCategory(id: string): boolean {
   return Object.prototype.hasOwnProperty.call(CATEGORY_LABELS, id);
+}
+
+/** Normalize upstream tags while correcting only unambiguous name/category conflicts. */
+export function normalizePlaceCategory(rawCategory: string, placeName: string): string {
+  const raw = String(rawCategory || "").trim().toLowerCase();
+  const category = CATEGORY_ALIASES[raw] || raw;
+  const name = String(placeName || "").trim();
+  if (LAUNDRY_NAME.test(name)) return "laundry";
+  if (MEDICAL_NAME.test(name)) return "hospital";
+  return category;
 }
 
 export function isShelter(category: string): boolean {
