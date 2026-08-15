@@ -10,7 +10,8 @@
     "OPENNAVI_ORIGIN": "https://opennavi.org",
     "SITE_ORIGIN": "https://saigaiban.com",
     "GA4_MEASUREMENT_ID": "G-4KQPS1LRHV",
-    "PUBLIC_READ_CACHE": "off"
+    "PUBLIC_READ_CACHE": "off",
+    "PUBLIC_POSTING_MODE": "off"
   },
   "routes": [
     { "pattern": "saigaiban.com", "custom_domain": true },

@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { publicCacheMode } from "../src/cache.ts";
 import { evidenceLabel, freshnessFor, reportEvidence } from "../src/evidence.ts";
-import { escapeHtml, gaSnippet, renderHome } from "../src/html.ts";
+import { escapeHtml, gaSnippet, renderHome, renderPlace } from "../src/html.ts";
 import { categoryLabel, isShelter } from "../src/labels.ts";
 import { googleMapsSearchUrl } from "../src/maps.ts";
 import { officialHubUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
 import { cleanNote, parseVerdict, resolvePost } from "../src/reports.ts";
+import { publicPostingEnabled, publicPostingMode } from "../src/posting.ts";
 import { sanitizeTelemetry, telemetryAllowlist } from "../src/telemetry.ts";
 
 test("opennavi origin never falls back to localhost", () => {
@@ -28,7 +29,10 @@ test("evidence separates authority, review, and freshness", () => {
   assert.deepEqual(resident, { authority: "resident", review: "unknown", freshness: "fresh" });
   assert.equal(evidenceLabel(resident), "住民報告・未確認");
   assert.equal(freshnessFor("2026-08-14T00:00:00Z", now), "stale");
+  assert.equal(freshnessFor("2026-08-12T00:00:00Z", now), "expired");
+  assert.equal(freshnessFor("2026-08-17T00:00:00Z", now), "unknown");
   assert.equal(freshnessFor("not-a-date", now), "unknown");
+  assert.equal(evidenceLabel({ authority: "resident", review: "unknown", freshness: "expired" }), "住民報告・未確認・期限切れ・古い可能性あり");
 });
 
 test("telemetry keeps an event-specific allowlist and drops free text", () => {
@@ -39,7 +43,43 @@ test("telemetry keeps an event-specific allowlist and drops free text", () => {
     note: "個人情報を含む自由文",
   });
   assert.deepEqual(params, { area: "mobara", category: "conv", verdict: "open" });
+  assert.deepEqual(sanitizeTelemetry("report_submit", {
+    area: "茂原市",
+    category: "日本語自由文",
+    verdict: "知らない",
+  }), {});
   assert.deepEqual(telemetryAllowlist("zero_result"), ["area", "category"]);
+});
+
+test("public posting is closed unless explicitly enabled", () => {
+  assert.equal(publicPostingMode(undefined), "off");
+  assert.equal(publicPostingMode("unexpected"), "off");
+  assert.equal(publicPostingEnabled(undefined), false);
+  assert.equal(publicPostingEnabled("on"), true);
+});
+
+test("place page hides the report form while public posting is closed", () => {
+  const meta = {
+    disaster: { id: "r8-chiba-heavy-rain", label: "令和8年千葉県豪雨" },
+    areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" }],
+  };
+  const place = {
+    id: "place-1234",
+    seed_key: "spot:conv:mobara:店",
+    name: "テスト店",
+    area: "mobara",
+    category: "conv",
+    lat: null,
+    lng: null,
+    address: null,
+    source: "openstreetmap",
+    data_basis_date: null,
+    identity_only: true,
+    maps_url: "",
+  };
+  const html = renderPlace("https://saigaiban.com", "https://opennavi.org", meta, "mobara", place, [], null, null, false);
+  assert.doesNotMatch(html, /<form method="post"/);
+  assert.match(html, /投稿受付を停止しています/);
 });
 
 test("official hub URL uses the town slug", () => {

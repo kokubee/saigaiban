@@ -83,5 +83,7 @@ export type Env = {
   RAKUTEN_ACCESS_KEY?: string;
   /** Public OpenNavi dependency cache rollout: off (default), shadow, or on. */
   PUBLIC_READ_CACHE?: string;
+  /** Public report intake: off (default) or on after P0 safety checks. */
+  PUBLIC_POSTING_MODE?: string;
   DB: D1Database;
 };

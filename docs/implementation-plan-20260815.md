@@ -3,7 +3,7 @@
 作成日: 2026-08-15／レビュー反映: 2026-08-16
 対象リポジトリ: `/Users/kokubee/code2026/saigaiban`  
 基準コミット: `382b1b7 feat: separate disaster board support navigation`  
-状態: 条件付き承認。P-1（現行実装との差分固定）は `docs/implementation-baseline-20260816.md` に記録済み。P0は証拠・鮮度projectionとテレメトリallowlistの初回実装まで完了し、write ownership・投稿安全性・キャッシュ契約が残る。コード変更・D1変更・デプロイは、各フェーズの受入条件を確認してから行う。
+状態: 条件付き承認。P-1（現行実装との差分固定）は `docs/implementation-baseline-20260816.md` に記録済み。P0は証拠・鮮度projection、値検証付きテレメトリallowlist、既定OFFの投稿受付ゲートまで実装済み。write ownershipの承認、Turnstile・短期HMAC・保持期限、キャッシュ契約が残る。コード変更・D1変更・デプロイは、各フェーズの受入条件を確認してから行う。
 
 ## 1. 災害板の役割
 
@@ -124,7 +124,7 @@ P-1の成果物は、差分表、依存API契約、移行対象データ、変�
 ```ts
 authority: "official" | "resident" | "operator" | "reference"
 review: "confirmed" | "unreviewed" | "disputed" | "unknown"
-freshness: "fresh" | "stale" | "unknown"
+freshness: "fresh" | "stale" | "expired" | "unknown"
 ```
 
 例: 店舗カードの住民報告は `authority=resident`、管理者が内容を確認しても `authority` は変えない。OpenNaviの公式ライフライン要約は `authority=official` だが、本文の確認時刻が古ければ `freshness=stale` になる。画面の「公式確認」「住民報告」「古い可能性」はこの3軸から導出する。

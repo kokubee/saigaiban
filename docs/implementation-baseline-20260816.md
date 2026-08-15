@@ -5,6 +5,7 @@
 コード基準: `382b1b7`
 計画更新: `66952a3`
 P0初回実装: `dc93a54`（証拠・鮮度projection、テレメトリallowlist）
+P0安全化追補: 投稿受付ゲート、テレメトリ値検証、鮮度期限、店側カード表示を実装（未コミット）
 
 ## 1. P-1の判定
 
@@ -54,10 +55,10 @@ P0以降の開始条件は、次の3点である。
 ```ts
 authority: "official" | "resident" | "operator" | "reference"
 review: "confirmed" | "unreviewed" | "disputed" | "unknown"
-freshness: "fresh" | "stale" | "unknown"
+freshness: "fresh" | "stale" | "expired" | "unknown"
 ```
 
-P0ではこのprojectionを追加し、「店側が入力した」ことと「運営が確認した」ことを別表示にする。`role=owner` は認証済み所有者ではなく、当面は「店側の自己申告」とする。
+P0ではこのprojectionを追加し、「店側が入力した」ことと「運営が確認した」ことを別表示にする。`role=owner` は認証済み所有者ではなく、当面は「店側の自己申告」とする。24時間以内を `fresh`、24〜72時間を `stale`、72時間超を `expired`、未来時刻・不正時刻を `unknown` とし、カード・履歴の両方で鮮度ラベルを表示する。
 
 ## 4. 安全性の現状とP2前提
 
@@ -96,7 +97,7 @@ P0実装時に、最低限次のテストを追加する。
 
 1. `authority=resident` の報告が「公式確認」と表示されない
 2. `review=confirmed` でも `authority` が `resident` のまま残る
-3. `freshness=stale` の報告が一覧の先頭で営業中と誤認されない
+3. `freshness=stale`／`expired` の報告が一覧の先頭で営業中と誤認されない
 4. `role=owner` が「認証済み所有者」と表示されない
 5. URL・電話・個人連絡先・待ち合わせが保存されない
 6. OpenNaviの非公開キー（`hidden`, `owner_uid`, `review_status`等）が災害板へ流れない
@@ -113,4 +114,4 @@ P0実装時に、最低限次のテストを追加する。
 - 外部支援・旅行プロバイダへの送信
 - 投稿受付の再開
 
-P-1はベースライン文書の追加のみであり、次のコード変更はP0の承認後に別コミットで行う。
+P-1のベースラインをもとに、P0追補では投稿受付を既定OFFに固定した。`PUBLIC_POSTING_MODE=on` は、write ownershipの承認とTurnstile・短期HMAC・保持期限・管理経路の実装後に限って有効化する。OpenNavi側の変更はこのリポジトリへ混ぜない。

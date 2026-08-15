@@ -205,6 +205,7 @@ function renderCard(slug: string, areaName: string, place: BoardPlace, summary?:
   const latest = summary?.latest;
   const mapsUrl = googleMapsSearchUrl(place.name, areaName, place.address);
   const steerMaps = Boolean(owner && (owner.prefer_maps || owner.verdict === "maps") && mapsUrl);
+  const ownerEvidence = owner?.evidence || { authority: "operator", review: "unknown", freshness: "unknown" } as const;
   const tag = steerMaps
     ? `<span class="tag">店側 地図へ</span>`
     : owner
@@ -214,8 +215,8 @@ function renderCard(slug: string, areaName: string, place: BoardPlace, summary?:
         : `<span class="tag">未確認</span>`;
   const ownerLine = owner
     ? steerMaps
-      ? `<div class="owner"><p>店側は、営業を Google マップの情報へ寄せています。自己申告で、公式確認ではありません。</p><p><a href="${escapeHtml(mapsUrl)}" rel="noopener">Googleマップの営業情報を見る</a></p></div>`
-      : `<p class="note">店側の自己申告: ${escapeHtml(VERDICT_LABEL[owner.verdict])}（${escapeHtml(formatWhen(owner.created_at))}・公式ではない）</p>`
+      ? `<div class="owner"><p>店側は、営業を Google マップの情報へ寄せています（${escapeHtml(evidenceLabel(ownerEvidence))}）。</p><p><a href="${escapeHtml(mapsUrl)}" rel="noopener">Googleマップの営業情報を見る</a></p></div>`
+      : `<p class="note">店側の自己申告: ${escapeHtml(VERDICT_LABEL[owner.verdict])}（${escapeHtml(formatWhen(owner.created_at))}・${escapeHtml(evidenceLabel(ownerEvidence))}）</p>`
     : "";
   const latestLine = !steerMaps && latest && latest.role !== "owner"
     ? `<p class="note">見かけた人: ${escapeHtml(VERDICT_LABEL[latest.verdict])}（${escapeHtml(formatWhen(latest.created_at))}・${escapeHtml(evidenceLabel(latest.evidence || { authority: "resident", review: "unknown", freshness: "unknown" }))}）</p>`
@@ -245,6 +246,7 @@ export function renderPlace(
   reports: Report[],
   notice: string | null,
   measurementId?: string | null,
+  allowPosting = false,
 ): string {
   const area = meta.areas.find((a) => a.slug === slug);
   const nameJa = area?.nameJa || slug;
@@ -285,6 +287,22 @@ export function renderPlace(
         <p class="note">店側の投稿も確認はしていません。Google マップの営業情報へ寄せることもできます。</p>
       `
     : `<input type="hidden" name="role" value="visitor">`;
+  const postingNotice = allowPosting
+    ? ""
+    : `<p class="caution">現在は投稿受付を停止しています。最新情報は <a href="${escapeHtml(officialHubUrl(origin, slug))}">公式ハブ</a> で確認してください。</p>`;
+  const reportForm = allowPosting
+    ? `<form method="post" action="/a/${escapeHtml(slug)}/p/${escapeHtml(place.id)}">
+        ${ownerFields}
+        <label for="verdict">いまどうだったか</label>
+        <select id="verdict" name="verdict">
+          <option value="">選んでください</option>
+          ${options}
+        </select>
+        <label for="note">短いメモ（任意・80字まで）</label>
+        <textarea id="note" name="note" maxlength="80" placeholder="例: 15時ごろ、棚は少なかった"></textarea>
+        <button type="submit">投稿する</button>
+      </form>`
+    : "";
   return page({
     title: `${place.name} — ${nameJa}の災害板`,
     description: `${place.name}のいまどうか。投稿は見た時点の話です。公式ではありません。`,
@@ -296,17 +314,7 @@ export function renderPlace(
       <p class="lead">見たときの様子、または店側の自己申告を書けます。氏名・電話・待ち合わせは受けません。公式発表の代わりにはなりません。</p>
       ${shelter}${maps}
       ${notice ? `<p class="flash">${escapeHtml(notice)}</p>` : ""}
-      <form method="post" action="/a/${escapeHtml(slug)}/p/${escapeHtml(place.id)}">
-        ${ownerFields}
-        <label for="verdict">いまどうだったか</label>
-        <select id="verdict" name="verdict">
-          <option value="">選んでください</option>
-          ${options}
-        </select>
-        <label for="note">短いメモ（任意・80字まで）</label>
-        <textarea id="note" name="note" maxlength="80" placeholder="例: 15時ごろ、棚は少なかった"></textarea>
-        <button type="submit">投稿する</button>
-      </form>
+      ${postingNotice}${reportForm}
       <h2>これまでの投稿</h2>
       ${history}
       ${footer(origin, meta)}
