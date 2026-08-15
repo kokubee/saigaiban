@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { publicCacheMode } from "../src/cache.ts";
 import { evidenceLabel, freshnessFor, reportEvidence } from "../src/evidence.ts";
-import { escapeHtml, gaSnippet, renderHome, renderPlace } from "../src/html.ts";
+import { escapeHtml, gaSnippet, renderHome, renderPlace, renderTown } from "../src/html.ts";
 import { categoryLabel, isShelter } from "../src/labels.ts";
 import { googleMapsSearchUrl } from "../src/maps.ts";
 import { officialHubUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
 import { cleanNote, parseVerdict, resolvePost } from "../src/reports.ts";
 import { publicPostingEnabled, publicPostingMode } from "../src/posting.ts";
 import { sanitizeTelemetry, telemetryAllowlist } from "../src/telemetry.ts";
+import worker from "../src/index.ts";
+import type { Env } from "../src/types.ts";
 
 test("opennavi origin never falls back to localhost", () => {
   assert.equal(opennaviOrigin(""), "https://opennavi.org");
@@ -36,18 +38,22 @@ test("evidence separates authority, review, and freshness", () => {
 });
 
 test("telemetry keeps an event-specific allowlist and drops free text", () => {
+  const context = { areaSlugs: new Set(["mobara"]) };
   const params = sanitizeTelemetry("report_submit", {
     area: "mobara",
     category: "conv",
     verdict: "open",
     note: "個人情報を含む自由文",
-  });
+  }, context);
   assert.deepEqual(params, { area: "mobara", category: "conv", verdict: "open" });
   assert.deepEqual(sanitizeTelemetry("report_submit", {
     area: "茂原市",
     category: "日本語自由文",
     verdict: "知らない",
-  }), {});
+  }, context), {});
+  assert.deepEqual(sanitizeTelemetry("need_select", { area: "mobara", need: "call_me_09012345678" }, context), { area: "mobara" });
+  assert.deepEqual(sanitizeTelemetry("official_open", { area: "mobara", kind: "free-form" }, context), { area: "mobara" });
+  assert.deepEqual(sanitizeTelemetry("report_submit", { area: "not-a-real-area", category: "conv", verdict: "open" }, context), { category: "conv", verdict: "open" });
   assert.deepEqual(telemetryAllowlist("zero_result"), ["area", "category"]);
 });
 
@@ -79,7 +85,45 @@ test("place page hides the report form while public posting is closed", () => {
   };
   const html = renderPlace("https://saigaiban.com", "https://opennavi.org", meta, "mobara", place, [], null, null, false);
   assert.doesNotMatch(html, /<form method="post"/);
+  assert.doesNotMatch(html, /書けます/);
   assert.match(html, /投稿受付を停止しています/);
+  const townHtml = renderTown("https://saigaiban.com", "https://opennavi.org", meta, "mobara", [place], false, new Map(), null, false);
+  assert.doesNotMatch(townHtml, /いまどうかを書く/);
+  assert.match(townHtml, /これまでの報告を見る/);
+});
+
+test("POST rejects before OpenNavi or D1 access while public posting is closed", async () => {
+  const originalFetch = globalThis.fetch;
+  let externalFetches = 0;
+  let d1Accesses = 0;
+  globalThis.fetch = async () => {
+    externalFetches += 1;
+    throw new Error("unexpected external fetch");
+  };
+  const db = new Proxy({}, {
+    get() {
+      d1Accesses += 1;
+      throw new Error("unexpected D1 access");
+    },
+  });
+  try {
+    const response = await worker.fetch(
+      new Request("https://saigaiban.com/a/mobara/p/12345678", { method: "POST" }),
+      {
+        OPENNAVI_ORIGIN: "https://opennavi.org",
+        SITE_ORIGIN: "https://saigaiban.com",
+        PUBLIC_POSTING_MODE: "off",
+        DB: db,
+      } as unknown as Env,
+    );
+    assert.equal(response.status, 303);
+    assert.equal(externalFetches, 0);
+    assert.equal(d1Accesses, 0);
+    const location = new URL(response.headers.get("location") || "https://saigaiban.com/");
+    assert.equal(location.searchParams.get("err"), "現在は投稿受付を停止しています。公式ハブで確認してください。");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("official hub URL uses the town slug", () => {

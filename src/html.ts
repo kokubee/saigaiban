@@ -162,6 +162,7 @@ export function renderTown(
   showAll: boolean,
   summaries: Map<string, PlaceSummary>,
   measurementId?: string | null,
+  allowPosting = false,
 ): string {
   const area = meta.areas.find((a) => a.slug === slug);
   if (!area) return renderNotFound(site, measurementId);
@@ -177,7 +178,7 @@ export function renderTown(
     .map(([cat, list]) => {
       const shown = list.slice(0, preview);
       const more = list.length - shown.length;
-      const cards = shown.map((p) => renderCard(slug, area.nameJa, p, summaries.get(p.id))).join("");
+      const cards = shown.map((p) => renderCard(slug, area.nameJa, p, summaries.get(p.id), allowPosting)).join("");
       const extra =
         more > 0
           ? `<p class="note"><a href="/a/${escapeHtml(slug)}?all=1">この種別をすべて見る（あと${more}件）</a></p>`
@@ -193,14 +194,14 @@ export function renderTown(
     body: `
       <nav><a href="/">災害板</a><a href="/about">この板について</a><a href="${escapeHtml(officialHubUrl(origin, slug))}">${escapeHtml(area.nameJa)}の公式ハブ</a></nav>
       <h1>${escapeHtml(area.nameJa)}の災害板</h1>
-      <p class="lead">場所の正体に、「いまどうだったか」を書けます。投稿は見た時点の話で、公式ではありません。店の営業は地図、避難所の開設は公式ハブで確認してください。</p>
+      <p class="lead">${allowPosting ? "場所の正体に、「いまどうだったか」を書けます。" : "場所ごとのこれまでの報告を確認できます。"} 投稿は見た時点の話で、公式ではありません。店の営業は地図、避難所の開設は公式ハブで確認してください。</p>
       ${sections || `<p class="note">この町の場所カードはまだありません。</p>`}
       ${footer(origin, meta)}
     `,
   });
 }
 
-function renderCard(slug: string, areaName: string, place: BoardPlace, summary?: PlaceSummary): string {
+function renderCard(slug: string, areaName: string, place: BoardPlace, summary?: PlaceSummary, allowPosting = false): string {
   const owner = summary?.latestOwner;
   const latest = summary?.latest;
   const mapsUrl = googleMapsSearchUrl(place.name, areaName, place.address);
@@ -233,7 +234,7 @@ function renderCard(slug: string, areaName: string, place: BoardPlace, summary?:
   return `<article class="card">
     <h3>${tag}${escapeHtml(place.name)}</h3>
     ${addr}${shelter}${ownerLine}${latestLine}
-    <p>${maps}${maps ? " ・ " : ""}<a href="/a/${escapeHtml(slug)}/p/${escapeHtml(place.id)}">いまどうかを書く</a></p>
+    <p>${maps}${maps ? " ・ " : ""}<a href="/a/${escapeHtml(slug)}/p/${escapeHtml(place.id)}">${allowPosting ? "いまどうかを書く" : "これまでの報告を見る"}</a></p>
   </article>`;
 }
 
@@ -311,7 +312,7 @@ export function renderPlace(
     body: `
       <nav><a href="/">災害板</a><a href="/a/${escapeHtml(slug)}">${escapeHtml(nameJa)}</a><a href="${escapeHtml(officialHubUrl(origin, slug))}">公式ハブ</a></nav>
       <h1>${escapeHtml(place.name)}</h1>
-      <p class="lead">見たときの様子、または店側の自己申告を書けます。氏名・電話・待ち合わせは受けません。公式発表の代わりにはなりません。</p>
+      <p class="lead">${allowPosting ? "見たときの様子、または店側の自己申告を書けます。" : "見たときの様子や、これまでの報告を確認できます。"} 氏名・電話・待ち合わせは受けません。公式発表の代わりにはなりません。</p>
       ${shelter}${maps}
       ${notice ? `<p class="flash">${escapeHtml(notice)}</p>` : ""}
       ${postingNotice}${reportForm}

@@ -41,6 +41,11 @@ export default {
         return Response.redirect(officialSupportUrl(origin), 302);
       }
 
+      const earlyPlacePath = path.match(/^\/a\/([a-z0-9-]+)\/p\/([0-9a-f-]{8,})$/i);
+      if (earlyPlacePath && request.method === "POST" && !postingEnabled) {
+        return redirect(site, `/a/${earlyPlacePath[1]}/p/${earlyPlacePath[2]}`, "現在は投稿受付を停止しています。公式ハブで確認してください。");
+      }
+
       const meta = await fetchMeta(origin, env.PUBLIC_READ_CACHE);
 
       if (path === "/sitemap.xml") {
@@ -76,7 +81,7 @@ export default {
         const showAll = url.searchParams.get("all") === "1";
         const page = await fetchPlaces(origin, slug, { limit: showAll ? 200 : 80 }, env.PUBLIC_READ_CACHE);
         const summaries = await latestByPlaces(env.DB, page.places.map((p) => p.id));
-        return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries, measurementId));
+        return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries, measurementId, postingEnabled));
       }
 
       return html(renderNotFound(site, measurementId), 404);
