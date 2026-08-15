@@ -1,0 +1,19 @@
+{
+  "name": "saigaiban",
+  "private": false,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "災害板 — OpenNavi の場所台帳から町ごとの掲示板を立てる OSS。公式ではない。",
+  "license": "MIT",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "npm test && npm run typecheck && wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types test/*.test.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260801.1",
+    "typescript": "^5.8.3",
+    "wrangler": "^4.28.0"
+  }
+}

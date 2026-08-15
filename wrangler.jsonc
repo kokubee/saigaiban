@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "saigaiban",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "vars": {
+    "OPENNAVI_ORIGIN": "https://opennavi.org",
+    "SITE_ORIGIN": "https://saigaiban.com"
+  },
+  "routes": [
+    { "pattern": "saigaiban.com", "custom_domain": true },
+    { "pattern": "www.saigaiban.com", "custom_domain": true }
+  ]
+}
