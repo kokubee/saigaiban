@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getCachedJson, publicCacheMode } from "../src/cache.ts";
 import { evidenceLabel, freshnessFor, reportEvidence } from "../src/evidence.ts";
-import { escapeHtml, gaSnippet, renderHome, renderPlace, renderTown } from "../src/html.ts";
+import { activityWindowLabel, escapeHtml, gaSnippet, renderHome, renderPlace, renderTown } from "../src/html.ts";
 import { categoryDescription, categoryLabel, isShelter, normalizePlaceCategory } from "../src/labels.ts";
 import { googleMapsSearchUrl } from "../src/maps.ts";
 import { officialHubUrl, officialVictimUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
@@ -257,6 +257,30 @@ test("place page hides the report form while public posting is closed", () => {
   const hospitalOnly = renderTown("https://saigaiban.com", "https://opennavi.org", meta, "mobara", mixed, false, new Map(), null, false, "hospital");
   assert.match(hospitalOnly, /おおあみ泌尿器科/);
   assert.doesNotMatch(hospitalOnly, /鈴木クリーニング/);
+});
+
+test("town cards put recent reports first and show six-to-twelve-hour windows", () => {
+  const now = Date.parse("2026-08-16T12:00:00Z");
+  assert.equal(activityWindowLabel("2026-08-16T07:00:00Z", now), "直近6時間");
+  assert.equal(activityWindowLabel("2026-08-16T03:00:00Z", now), "6〜12時間前");
+  assert.equal(activityWindowLabel("2026-08-15T10:00:00Z", now), "24時間超");
+  const meta = {
+    disaster: { id: "r8-chiba-heavy-rain", label: "令和8年千葉県豪雨" },
+    areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" }],
+  };
+  const base = { id: "place", seed_key: "spot:conv:mobara:店", name: "店", area: "mobara", category: "conv", lat: null, lng: null, address: null, source: "test", data_basis_date: null, identity_only: true, maps_url: "" };
+  const oldPlace = { ...base, id: "old", name: "古い報告の店" };
+  const recentPlace = { ...base, id: "recent", name: "最近報告の店" };
+  const report = (id: string, place_id: string, created_at: string) => ({ id, place_id, area: "mobara", seed_key: "", verdict: "open" as const, note: null, created_at, role: "visitor" as const, prefer_maps: false });
+  const recentTime = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+  const oldTime = new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString();
+  const summaries = new Map([
+    ["old", { latest: report("old-report", "old", oldTime), latestOwner: null, count: 1 }],
+    ["recent", { latest: report("recent-report", "recent", recentTime), latestOwner: null, count: 1 }],
+  ]);
+  const html = renderTown("https://saigaiban.com", "https://opennavi.org", meta, "mobara", [oldPlace, recentPlace], true, summaries, null, false);
+  assert.ok(html.indexOf("最近報告の店") < html.indexOf("古い報告の店"));
+  assert.match(html, /直近6時間/);
 });
 
 test("reporting UI is hidden until the independent HMAC gate is ready", () => {

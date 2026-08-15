@@ -189,8 +189,9 @@ export function renderTown(
   const filteredPlaces = normalizedQuery
     ? categoryPlaces.filter((place) => [place.name, place.address || "", categoryLabel(place.category)].join(" ").toLocaleLowerCase("ja-JP").includes(normalizedQuery))
     : categoryPlaces;
+  const orderedPlaces = [...filteredPlaces].sort((a, b) => comparePlaceActivity(a, b, summaries));
   const byCat = new Map<string, BoardPlace[]>();
-  for (const place of filteredPlaces) {
+  for (const place of orderedPlaces) {
     const list = byCat.get(place.category) || [];
     list.push(place);
     byCat.set(place.category, list);
@@ -230,7 +231,7 @@ export function renderTown(
       <input id="town-search" name="q" type="search" maxlength="40" value="${escapeHtml(query)}" placeholder="店名・施設名・住所で検索">
       <button type="submit">検索</button>
     </form>
-    <p class="result-count">${filteredPlaces.length}件表示${category ? `・${escapeHtml(categoryLabel(category))}` : ""}${query ? `・「${escapeHtml(query)}」` : ""}</p>
+    <p class="result-count">${orderedPlaces.length}件表示${category ? `・${escapeHtml(categoryLabel(category))}` : ""}${query ? `・「${escapeHtml(query)}」` : ""}・最近の報告がある場所を上位表示</p>
   </section>`;
   return page({
     title: `${area.nameJa}の災害板`,
@@ -264,10 +265,10 @@ function renderCard(slug: string, areaName: string, place: BoardPlace, summary?:
   const ownerLine = owner
     ? steerMaps
       ? `<div class="owner"><p>店側は、営業を Google マップの情報へ寄せています（${escapeHtml(evidenceLabel(ownerEvidence))}）。</p><p><a href="${escapeHtml(mapsUrl)}" rel="noopener">Googleマップの営業情報を見る</a></p></div>`
-      : `<p class="note">店側の自己申告: ${escapeHtml(VERDICT_LABEL[owner.verdict])}（${escapeHtml(formatWhen(owner.created_at))}・${escapeHtml(evidenceLabel(ownerEvidence))}）</p>`
+      : `<p class="note">店側の自己申告: ${escapeHtml(VERDICT_LABEL[owner.verdict])}（${escapeHtml(formatWhen(owner.created_at))}・${escapeHtml(activityWindowLabel(owner.created_at))}・${escapeHtml(evidenceLabel(ownerEvidence))}）</p>`
     : "";
   const latestLine = !steerMaps && latest && latest.role !== "owner"
-    ? `<p class="note">見かけた人: ${escapeHtml(VERDICT_LABEL[latest.verdict])}（${escapeHtml(formatWhen(latest.created_at))}・${escapeHtml(evidenceLabel(latest.evidence || { authority: "resident", review: "unknown", freshness: "unknown" }))}）</p>`
+    ? `<p class="note">見かけた人: ${escapeHtml(VERDICT_LABEL[latest.verdict])}（${escapeHtml(formatWhen(latest.created_at))}・${escapeHtml(activityWindowLabel(latest.created_at))}・${escapeHtml(evidenceLabel(latest.evidence || { authority: "resident", review: "unknown", freshness: "unknown" }))}）</p>`
     : !owner && !latest
       ? `<p class="note">まだ投稿はありません。</p>`
       : "";
@@ -283,6 +284,36 @@ function renderCard(slug: string, areaName: string, place: BoardPlace, summary?:
     ${addr}${shelter}${ownerLine}${latestLine}
     <p>${maps}${maps ? " ・ " : ""}<a href="/a/${escapeHtml(slug)}/p/${escapeHtml(place.id)}">${allowPosting ? "いまどうかを書く" : "これまでの報告を見る"}</a></p>
   </article>`;
+}
+
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function activityWindowLabel(iso: string, now = Date.now()): string {
+  const created = Date.parse(iso);
+  if (!Number.isFinite(created) || created > now) return "時刻不明";
+  const age = now - created;
+  if (age <= SIX_HOURS_MS) return "直近6時間";
+  if (age <= TWELVE_HOURS_MS) return "6〜12時間前";
+  if (age <= DAY_MS) return "12〜24時間前";
+  return "24時間超";
+}
+
+function activityRank(summary: PlaceSummary | undefined, now = Date.now()): [number, number, number] {
+  const latest = summary?.latest;
+  if (!latest) return [4, 0, 0];
+  const created = Date.parse(latest.created_at);
+  if (!Number.isFinite(created) || created > now) return [4, 0, summary?.count || 0];
+  const age = now - created;
+  const bucket = age <= SIX_HOURS_MS ? 0 : age <= TWELVE_HOURS_MS ? 1 : age <= DAY_MS ? 2 : 3;
+  return [bucket, -created, -(summary?.count || 0)];
+}
+
+function comparePlaceActivity(a: BoardPlace, b: BoardPlace, summaries: Map<string, PlaceSummary>): number {
+  const ar = activityRank(summaries.get(a.id));
+  const br = activityRank(summaries.get(b.id));
+  return ar[0] - br[0] || ar[1] - br[1] || ar[2] - br[2] || a.name.localeCompare(b.name, "ja");
 }
 
 export function renderPlace(
