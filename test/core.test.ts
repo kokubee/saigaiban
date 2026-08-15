@@ -283,6 +283,46 @@ test("flag cooldown uses SQLite julianday arithmetic", async () => {
   assert.match(sqls.find((sql) => sql.includes("report_flags")) || "", /julianday\(created_at\)/);
 });
 
+test("successful report flag returns to the source page with a 303", async () => {
+  const db = {
+    prepare(sql: string) {
+      return {
+        bind() {
+          return {
+            first: async () => sql.includes("FROM reports") ? ({ id: "deadbeef-1234" }) : null,
+            run: async () => ({ success: true }),
+          };
+        },
+      };
+    },
+  } as unknown as D1Database;
+  const body = "reason=privacy";
+  const response = await worker.fetch(
+    new Request("https://saigaiban.com/api/reports/deadbeef-1234/flag", {
+      method: "POST",
+      headers: {
+        Origin: "https://saigaiban.com",
+        Referer: "https://saigaiban.com/a/mobara/p/place-1234",
+        "CF-Connecting-IP": "192.0.2.1",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Length": String(body.length),
+      },
+      body,
+    }),
+    {
+      OPENNAVI_ORIGIN: "https://opennavi.org",
+      SITE_ORIGIN: "https://saigaiban.com",
+      PUBLIC_POSTING_MODE: "off",
+      RATE_LIMIT_HMAC_SECRET: "12345678901234567890123456789012",
+      DB: db,
+    } as unknown as Env,
+  );
+  assert.equal(response.status, 303);
+  const location = new URL(response.headers.get("location") || "https://saigaiban.com/");
+  assert.equal(location.pathname, "/a/mobara/p/place-1234");
+  assert.equal(location.searchParams.get("flag"), "1");
+});
+
 test("POST rejects before OpenNavi or D1 access while public posting is closed", async () => {
   const originalFetch = globalThis.fetch;
   let externalFetches = 0;
