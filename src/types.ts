@@ -48,9 +48,37 @@ export type PlaceSummary = {
   count: number;
 };
 
+export type StayListing = {
+  id: string;
+  name: string;
+  address: string;
+  blurb: string | null;
+  imageUrl: string | null;
+  href: string;
+  provider: "rakuten";
+};
+
+export type TourismProvider = {
+  id: "rakuten" | "jalan";
+  label: string;
+  href: string;
+};
+
+export type TourismFetchResult = {
+  status: "ok" | "unconfigured" | "unsupported" | "rate_limited" | "maintenance" | "error";
+  message: string;
+  listings: StayListing[];
+  providers: TourismProvider[];
+  creditHtml: string;
+};
+
 export type Env = {
   OPENNAVI_ORIGIN: string;
   SITE_ORIGIN: string;
   GA4_MEASUREMENT_ID?: string;
+  RAKUTEN_APPLICATION_ID?: string;
+  RAKUTEN_ACCESS_KEY?: string;
+  /** Public OpenNavi dependency cache rollout: off (default), shadow, or on. */
+  PUBLIC_READ_CACHE?: string;
   DB: D1Database;
 };

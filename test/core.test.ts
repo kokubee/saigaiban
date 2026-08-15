@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { publicCacheMode } from "../src/cache.ts";
 import { escapeHtml, gaSnippet, renderHome } from "../src/html.ts";
 import { categoryLabel, isShelter } from "../src/labels.ts";
+import { googleMapsSearchUrl } from "../src/maps.ts";
 import { officialHubUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
 import { cleanNote, parseVerdict, resolvePost } from "../src/reports.ts";
 
@@ -11,8 +13,23 @@ test("opennavi origin never falls back to localhost", () => {
   assert.equal(opennaviOrigin("https://opennavi.org/"), "https://opennavi.org");
 });
 
+test("public OpenNavi cache is opt-in", () => {
+  assert.equal(publicCacheMode(undefined), "off");
+  assert.equal(publicCacheMode("off"), "off");
+  assert.equal(publicCacheMode("shadow"), "shadow");
+  assert.equal(publicCacheMode("on"), "on");
+});
+
 test("official hub URL uses the town slug", () => {
   assert.equal(officialHubUrl("https://opennavi.org", "mobara"), "https://opennavi.org/a/mobara");
+});
+
+test("Google Maps links search by place name and municipality, never coordinates", () => {
+  const url = googleMapsSearchUrl("イオン大網白里店", "大網白里市", "千葉県大網白里市みやこ野1-1");
+  assert.match(url, /google\.com\/maps\/search\/\?api=1&query=/);
+  assert.match(decodeURIComponent(url), /イオン大網白里店/);
+  assert.match(decodeURIComponent(url), /大網白里市/);
+  assert.doesNotMatch(url, /35\.4|140\.3/);
 });
 
 test("stripPlace keeps identity only and drops empty rows", () => {
@@ -73,6 +90,23 @@ test("home page head includes GA4 when configured", () => {
     disaster: { id: "r8-chiba-heavy-rain", label: "令和8年千葉県豪雨" },
     areas: [],
   }).includes("googletagmanager"), false);
+});
+
+test("home shows one prefecture at a time behind tabs", () => {
+  const meta = {
+    disaster: { id: "r8-chiba-heavy-rain", label: "令和8年千葉県豪雨" },
+    areas: [
+      { slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" },
+      { slug: "kumamoto", nameJa: "熊本市", prefCode: "43", status: "active" },
+    ],
+  };
+  const first = renderHome("https://saigaiban.com", "https://opennavi.org", meta);
+  assert.match(first, /茂原市/);
+  assert.doesNotMatch(first, /熊本市の/);
+  assert.match(first, /\?pref=43/);
+  const second = renderHome("https://saigaiban.com", "https://opennavi.org", meta, null, "43");
+  assert.match(second, /熊本市/);
+  assert.doesNotMatch(second, /茂原市の市区町村/);
 });
 
 test("verdict and note rules reject matching and contacts", () => {

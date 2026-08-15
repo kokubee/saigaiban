@@ -7,7 +7,7 @@ import {
   renderSitemap,
   renderTown,
 } from "./html.ts";
-import { fetchMeta, fetchPlaceById, fetchPlaces, opennaviOrigin } from "./opennavi.ts";
+import { fetchMeta, fetchPlaceById, fetchPlaces, officialSupportUrl, opennaviOrigin } from "./opennavi.ts";
 import {
   allowedOrigin,
   cleanNote,
@@ -35,8 +35,11 @@ export default {
       if (path === "/health") {
         return json({ ok: true });
       }
+      if (path === "/support" || path.startsWith("/support/tourism/")) {
+        return Response.redirect(officialSupportUrl(origin), 302);
+      }
 
-      const meta = await fetchMeta(origin);
+      const meta = await fetchMeta(origin, env.PUBLIC_READ_CACHE);
 
       if (path === "/sitemap.xml") {
         return text(renderSitemap(site, meta.areas.map((a) => a.slug)), "application/xml; charset=utf-8");
@@ -45,7 +48,7 @@ export default {
         return html(renderAbout(site, origin, measurementId));
       }
       if (path === "/") {
-        return html(renderHome(site, origin, meta, measurementId));
+        return html(renderHome(site, origin, meta, measurementId, url.searchParams.get("pref")));
       }
 
       const placePath = path.match(/^\/a\/([a-z0-9-]+)\/p\/([0-9a-f-]{8,})$/i);
@@ -53,7 +56,7 @@ export default {
         const slug = placePath[1];
         const placeId = placePath[2];
         if (!meta.areas.some((a) => a.slug === slug)) return html(renderNotFound(site, measurementId), 404);
-        const place = await fetchPlaceById(origin, placeId);
+        const place = await fetchPlaceById(origin, placeId, env.PUBLIC_READ_CACHE);
         if (!place || place.area !== slug) return html(renderNotFound(site, measurementId), 404);
 
         if (request.method === "POST") {
@@ -69,7 +72,7 @@ export default {
         const slug = town[1];
         if (!meta.areas.some((a) => a.slug === slug)) return html(renderNotFound(site, measurementId), 404);
         const showAll = url.searchParams.get("all") === "1";
-        const page = await fetchPlaces(origin, slug, { limit: showAll ? 200 : 80 });
+        const page = await fetchPlaces(origin, slug, { limit: showAll ? 200 : 80 }, env.PUBLIC_READ_CACHE);
         const summaries = await latestByPlaces(env.DB, page.places.map((p) => p.id));
         return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries, measurementId));
       }
@@ -102,7 +105,7 @@ async function handlePost(
     roleRaw: form.get("role"),
     verdictRaw: form.get("verdict"),
     preferMapsRaw: form.get("prefer_maps"),
-    hasMapsUrl: Boolean(place.maps_url),
+    hasMapsUrl: Boolean(place.name && slug),
     shopLike: isShopLike(place.category),
   });
   if (decided.error) return redirect(site, dest, decided.error);
