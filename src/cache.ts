@@ -33,10 +33,14 @@ export async function getCachedJson(
 ): Promise<unknown> {
   const cache = defaultCache();
   const key = cacheKey(url);
+  let shadowHit: Response | null = null;
 
   if (cache && mode === "on") {
     const hit = await cache.match(key);
     if (hit) return hit.json();
+  }
+  if (cache && mode === "shadow") {
+    shadowHit = (await cache.match(key)) || null;
   }
 
   const res = await fetch(url, {
@@ -46,11 +50,21 @@ export async function getCachedJson(
   if (!res.ok) throw new Error(`opennavi ${res.status} ${url}`);
 
   const body = await res.text();
-  if (cache && mode === "on") {
+  if (cache && mode === "shadow" && shadowHit) {
+    try {
+      const cachedBody = await shadowHit.text();
+      console.log(JSON.stringify({ event: "opennavi_cache_shadow_compare", same: cachedBody === body }));
+    } catch {
+      console.log(JSON.stringify({ event: "opennavi_cache_shadow_compare", same: false }));
+    }
+  }
+  if (cache && (mode === "on" || mode === "shadow")) {
     // The header is useful to downstream HTTP caches; Cache API match/put
     // itself does not implement stale-while-revalidate.
     const headers = new Headers({
       "Content-Type": res.headers.get("Content-Type") || "application/json",
+      ...(res.headers.get("ETag") ? { ETag: res.headers.get("ETag") as string } : {}),
+      ...(res.headers.get("Last-Modified") ? { "Last-Modified": res.headers.get("Last-Modified") as string } : {}),
       "Cache-Control": `public, max-age=${maxAgeSeconds}, s-maxage=${maxAgeSeconds}, stale-while-revalidate=${staleWhileRevalidateSeconds}`,
     });
     try {

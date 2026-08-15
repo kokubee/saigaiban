@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { publicCacheMode } from "../src/cache.ts";
+import { getCachedJson, publicCacheMode } from "../src/cache.ts";
 import { evidenceLabel, freshnessFor, reportEvidence } from "../src/evidence.ts";
 import { escapeHtml, gaSnippet, renderHome, renderPlace, renderTown } from "../src/html.ts";
 import { categoryLabel, isShelter } from "../src/labels.ts";
@@ -25,6 +25,39 @@ test("public OpenNavi cache is opt-in", () => {
   assert.equal(publicCacheMode("off"), "off");
   assert.equal(publicCacheMode("shadow"), "shadow");
   assert.equal(publicCacheMode("on"), "on");
+});
+
+test("shadow cache writes but returns the origin response", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalCaches = (globalThis as typeof globalThis & { caches?: unknown }).caches;
+  let fetches = 0;
+  let puts = 0;
+  const entries = new Map<string, Response>();
+  const cache = {
+    async match(request: Request) {
+      return entries.get(request.url) || undefined;
+    },
+    async put(request: Request, response: Response) {
+      puts += 1;
+      entries.set(request.url, response);
+    },
+  };
+  (globalThis as typeof globalThis & { caches?: unknown }).caches = { default: cache };
+  globalThis.fetch = async () => {
+    fetches += 1;
+    return new Response(JSON.stringify({ source: "origin", version: 2 }), {
+      headers: { "content-type": "application/json", etag: '"v2"' },
+    });
+  };
+  try {
+    const result = await getCachedJson("https://opennavi.org/api/board/meta", "shadow", 60, 300);
+    assert.deepEqual(result, { source: "origin", version: 2 });
+    assert.equal(fetches, 1);
+    assert.equal(puts, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    (globalThis as typeof globalThis & { caches?: unknown }).caches = originalCaches;
+  }
 });
 
 test("evidence separates authority, review, and freshness", () => {
