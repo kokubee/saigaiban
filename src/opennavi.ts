@@ -20,9 +20,10 @@ export function officialSupportUrl(origin: string): string {
   return `${opennaviOrigin(origin)}/support`;
 }
 
-/** OpenNavi's resident/nearby entry, not the support-only page. */
-export function officialVictimUrl(origin: string): string {
-  return `${opennaviOrigin(origin)}/#open-areas`;
+/** OpenNavi's resident/nearby entry, scoped to a town when one is known. */
+export function officialVictimUrl(origin: string, slug?: string): string {
+  const area = String(slug || "").trim();
+  return area ? officialHubUrl(origin, area) : `${opennaviOrigin(origin)}/#open-areas`;
 }
 
 const FORBIDDEN = new Set([

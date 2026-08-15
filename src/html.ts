@@ -243,7 +243,7 @@ export function renderTown(
       <p class="lead">${allowPosting ? "場所の正体に、「いまどうだったか」を書けます。" : "場所ごとのこれまでの報告を確認できます。"} 投稿は見た時点の話で、公式ではありません。店の営業は地図、避難所の開設は公式ハブで確認してください。</p>
       ${tools}
       ${sections || `<p class="note">条件に合う場所がありません。カテゴリを戻すか、検索語を短くしてみてください。</p>`}
-      ${footer(origin, meta)}
+      ${footer(origin, meta, slug)}
     `,
   });
 }
@@ -369,7 +369,7 @@ export function renderPlace(
       ${postingNotice}${reportForm}
       <h2>これまでの投稿</h2>
       ${history}
-      ${footer(origin, meta)}
+      ${footer(origin, meta, slug)}
     `,
   });
 }
@@ -491,7 +491,7 @@ export function renderTourism(
       ${listings ? `<h2>楽天トラベルに掲載されている宿</h2><div class="cards">${listings}</div>` : ""}
       <div class="credit">${result.creditHtml}</div>
       <p class="note">予約は各サービス上で行います。災害板は予約を受け付けず、価格・評価・口コミの比較もしません。</p>
-      ${footer(origin, meta)}
+      ${footer(origin, meta, slug)}
     `,
   });
 }
@@ -506,13 +506,13 @@ export function renderNotFound(site: string, measurementId?: string | null): str
   });
 }
 
-function footer(origin: string, meta: BoardMeta | null): string {
+function footer(origin: string, meta: BoardMeta | null, slug?: string): string {
   const osm = meta?.placeLicense?.osm || "地図データは OpenStreetMap の寄与者によるものです（ODbL）。";
   const gsi = meta?.placeLicense?.gsi || "指定緊急避難場所は国土地理院データを含みます。";
   return `<footer class="foot">
     <p>${escapeHtml(osm)}</p>
     <p>${escapeHtml(gsi)}</p>
-    <p>OpenNavi被災者向け入口: <a href="${escapeHtml(officialVictimUrl(origin))}">${escapeHtml(officialVictimUrl(origin))}</a></p>
+    <p>OpenNavi被災者向け入口: <a href="${escapeHtml(officialVictimUrl(origin, slug))}">${escapeHtml(officialVictimUrl(origin, slug))}</a></p>
   </footer>`;
 }
 

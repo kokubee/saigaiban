@@ -234,12 +234,16 @@ test("place page hides the report form while public posting is closed", () => {
   assert.doesNotMatch(html, /<form method="post"/);
   assert.doesNotMatch(html, /書けます/);
   assert.match(html, /投稿受付を停止しています/);
+  assert.doesNotMatch(html, /opennavi\.org\/#open-areas/);
+  assert.match(html, /opennavi\.org\/a\/mobara/);
   const townHtml = renderTown("https://saigaiban.com", "https://opennavi.org", meta, "mobara", [place], false, new Map(), null, false);
   assert.doesNotMatch(townHtml, /いまどうかを書く/);
   assert.match(townHtml, /これまでの報告を見る/);
   assert.match(townHtml, /場所を絞る/);
   assert.match(townHtml, /コンビニ/);
   assert.match(townHtml, /name="q"/);
+  assert.doesNotMatch(townHtml, /opennavi\.org\/#open-areas/);
+  assert.match(townHtml, /opennavi\.org\/a\/mobara/);
   const filtered = renderTown("https://saigaiban.com", "https://opennavi.org", meta, "mobara", [place], false, new Map(), null, false, "conv", "テスト");
   assert.match(filtered, /value="テスト"/);
   assert.match(filtered, /category=conv/);
@@ -424,6 +428,7 @@ test("POST rejects an area outside the explicit posting allowlist", async () => 
 test("official hub URL uses the town slug", () => {
   assert.equal(officialHubUrl("https://opennavi.org", "mobara"), "https://opennavi.org/a/mobara");
   assert.equal(officialVictimUrl("https://opennavi.org"), "https://opennavi.org/#open-areas");
+  assert.equal(officialVictimUrl("https://opennavi.org", "mobara"), "https://opennavi.org/a/mobara");
 });
 
 test("Google Maps links search by place name and municipality, never coordinates", () => {
