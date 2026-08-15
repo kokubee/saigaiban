@@ -3,7 +3,7 @@
 作成日: 2026-08-15／レビュー反映: 2026-08-16
 対象リポジトリ: `/Users/kokubee/code2026/saigaiban`  
 基準コミット: `382b1b7 feat: separate disaster board support navigation`  
-状態: 条件付き承認。P-1（現行実装との差分固定）は `docs/implementation-baseline-20260816.md` に記録済み。P0は証拠・鮮度projection、値検証付きテレメトリallowlist、既定OFFの投稿受付ゲート、読み取り専用表示、外部取得前のPOST拒否、fail-closedなTurnstileサーバー検証まで実装済み。write ownershipの承認、Turnstile鍵設定、短期HMAC・保持期限、キャッシュ契約が残る。コード変更・D1変更・デプロイは、各フェーズの受入条件を確認してから行う。
+状態: 条件付き承認。P-1（現行実装との差分固定）は `docs/implementation-baseline-20260816.md` に記録済み。P0は証拠・鮮度projection、値検証付きテレメトリallowlist、既定OFFの投稿受付ゲート、読み取り専用表示、外部取得前のPOST拒否、fail-closedなTurnstileサーバー検証、短期HMACと識別子保持期限処理まで実装済み。write ownershipの承認、Turnstile/HMAC秘密の本番設定、キャッシュ契約が残る。コード変更・D1変更・デプロイは、各フェーズの受入条件を確認してから行う。
 
 ## 1. 災害板の役割
 
@@ -226,7 +226,7 @@ lifeline_reports
 
 受入条件: 現行の投稿制約を壊さず、既存テストを通過し、代表カードのauthority・review・freshness・時刻・出典が一貫する。
 
-P0残作業の順序は、write ownershipの文書承認（OpenNavi側は別リポジトリ・別承認）、Turnstile鍵の安全な設定確認、短期HMACと保持期限・削除処理、最後にキャッシュ契約の独立コミットとする。投稿受付を `on` に変更するデプロイは、前3項の受入条件を満たすまで行わない。
+P0残作業の順序は、write ownershipの文書承認（OpenNavi側は別リポジトリ・別承認）、Turnstile/HMAC秘密の安全な設定確認、最後にキャッシュ契約の独立コミットとする。投稿受付を `on` に変更するデプロイは、前2項の受入条件を満たすまで行わない。
 
 ### P1 — 被災者向け画面整理
 
@@ -249,7 +249,7 @@ P0残作業の順序は、write ownershipの文書承認（OpenNavi側は別リ�
 - 「今もそう」「変わった」「復旧した」を短い選択肢で操作
 - 投稿後に個人情報・連絡先を含まないことを再検査
 - クールダウン、Turnstile、通報、非表示、管理者確認のテスト
-- 既存のIP由来固定ハッシュを短期HMACへ移行し、保持期限を過ぎた識別子を削除
+- [P0実装済み] IP由来固定ハッシュを日次ローテーションHMACへ移行し、保持期限を過ぎた識別子を定期的にNULL化
 - `role=owner` を自己申告と表示し、認証済み所有者と誤認させない
 - OpenNavi `/lifelines` の既存行は `observedAt` と `confirmedAt` を分けて移行する
 
