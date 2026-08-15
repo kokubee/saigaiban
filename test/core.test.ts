@@ -427,6 +427,75 @@ test("POST rejects an area outside the explicit posting allowlist", async () => 
   }
 });
 
+test("POST proceeds only for an allowed area when security gates are ready", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: string[] = [];
+  globalThis.fetch = async (input) => {
+    const requestUrl = typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
+    requests.push(requestUrl);
+    if (requestUrl.includes("/api/board/meta")) {
+      return new Response(JSON.stringify({
+        disaster: { id: "r8", label: "テスト災害" },
+        areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" }],
+      }), { headers: { "content-type": "application/json" } });
+    }
+    if (requestUrl.includes("/api/board/places/12345678")) {
+      return new Response(JSON.stringify({ place: {
+        id: "12345678", seed_key: "spot:conv:mobara:テスト店", name: "テスト店", area: "mobara", category: "conv",
+        lat: null, lng: null, address: null, source: "test", data_basis_date: null, identity_only: true, maps_url: "",
+      } }), { headers: { "content-type": "application/json" } });
+    }
+    if (requestUrl.includes("/turnstile/v0/siteverify")) {
+      return new Response(JSON.stringify({ success: true, action: "report_submit", hostname: "saigaiban.com" }), { status: 200 });
+    }
+    throw new Error(`unexpected fetch: ${requestUrl}`);
+  };
+  const db = {
+    prepare(sql: string) {
+      return {
+        bind() {
+          return {
+            first: async () => sql.includes("SELECT created_at") ? null : undefined,
+            run: async () => ({ success: true }),
+          };
+        },
+      };
+    },
+  };
+  const form = new URLSearchParams({ "cf-turnstile-response": "token-123", role: "visitor", verdict: "open" });
+  try {
+    const response = await worker.fetch(
+      new Request("https://saigaiban.com/a/mobara/p/12345678", {
+        method: "POST",
+        headers: {
+          Origin: "https://saigaiban.com",
+          "CF-Connecting-IP": "192.0.2.1",
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Content-Length": String(form.toString().length),
+        },
+        body: form,
+      }),
+      {
+        OPENNAVI_ORIGIN: "https://opennavi.org",
+        SITE_ORIGIN: "https://saigaiban.com",
+        PUBLIC_POSTING_MODE: "on",
+        PUBLIC_POSTING_AREAS: "mobara",
+        PUBLIC_TURNSTILE_SITE_KEY: "site-key-123456",
+        PUBLIC_TURNSTILE_HOSTNAMES: "saigaiban.com",
+        TURNSTILE_SECRET_KEY: "secret",
+        RATE_LIMIT_HMAC_SECRET: "12345678901234567890123456789012",
+        DB: db,
+      } as unknown as Env,
+    );
+    assert.equal(response.status, 303);
+    assert.match(response.headers.get("location") || "", /\/a\/mobara\/p\/12345678\?ok=1$/);
+    assert.equal(requests.some((url) => url.includes("/api/board/meta")), true);
+    assert.equal(requests.some((url) => url.includes("siteverify")), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("official hub URL uses the town slug", () => {
   assert.equal(officialHubUrl("https://opennavi.org", "mobara"), "https://opennavi.org/a/mobara");
   assert.equal(officialVictimUrl("https://opennavi.org"), "https://opennavi.org/#open-areas");
