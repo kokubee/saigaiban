@@ -1,9 +1,9 @@
 # 災害板（saigaiban）実施計画
 
-作成日: 2026-08-15  
+作成日: 2026-08-15／レビュー反映: 2026-08-16
 対象リポジトリ: `/Users/kokubee/code2026/saigaiban`  
 基準コミット: `382b1b7 feat: separate disaster board support navigation`  
-状態: 実装前の計画。コード変更・D1変更・デプロイは、この計画の受入条件を確認してから行う。
+状態: 条件付き承認。P-1で現行実装との差分を固定してからP0へ進む。コード変更・D1変更・デプロイは、各フェーズの受入条件を確認してから行う。
 
 ## 1. 災害板の役割
 
@@ -36,6 +36,30 @@
 - オフライン時の読み取り、印刷、紙・電話へのフォールバックがない
 - OpenNavi障害時の期限付きスナップショットと、依存APIの状態表示を明確化する必要がある
 - 立ち上げ、投稿受付、収束、次災害への切替が一人の記憶に依存している
+
+### リポジトリ境界
+
+この計画は `saigaiban` の実装計画である。OpenNavi側のコード変更・DB変更・LINE設定変更は、依存契約の確認対象として記録するが、このリポジトリのコミットへ混ぜない。
+
+現在OpenNaviには住民向け `/lifelines` の書込経路が残っているため、「住民報告の正本を災害板へ一本化する」判断が完了するまで、災害板の新規投稿受付を再開しない。既存のOpenNavi報告はlegacy/read-onlyまたは管理者専用へ段階移行する。
+
+## 2.5 P-1 — 現行実装との差分固定（P0の前に必須）
+
+P-1では、計画の各項目を `実装済み` / `部分実装` / `未実装` / `OpenNavi依存` に分類し、既存機能を再実装対象から外す。
+
+| 領域 | `saigaiban` 現状 | 判定 | 計画上の扱い |
+|---|---|---|---|
+| 地域→市区町村→場所 | `src/html.ts`／`src/index.ts` | 実装済み | 入口の見やすさだけ改善 |
+| 場所報告 | `src/reports.ts`、D1 0001/0002 | 実装済み | stale・安全性・契約を強化 |
+| OpenNavi依存キャッシュ | `src/cache.ts` | 部分実装 | shadow書込・ETag・timeoutを検証 |
+| 公式ハブ／支援導線 | `src/opennavi.ts`、`src/html.ts` | 実装済み | 断水・停電導線を目立たせる |
+| オフライン地域スナップショット | 災害板には未実装 | 未実装 | shellとデータ保存の責務を分離して設計 |
+| 公式・住民・鮮度の3軸 | 災害板の表示ラベルは単軸 | 部分実装 | P0でprojection契約を定義 |
+| 地域全体の停電・断水報告 | `place_id`前提のため未実装 | 未実装 | `lifeline_reports`を別設計。既存reportsへ混在させない |
+| 管理者actor監査 | 災害板は未実装、OpenNaviは共有ADMIN_TOKEN | OpenNavi依存 | 投稿再開・収束の前提条件として別途解消 |
+| LINE自由文の外部AI分類 | 災害板にはない | OpenNavi依存 | 災害モードでは恒久的に無効化する契約を確認 |
+
+P-1の成果物は、差分表、依存API契約、移行対象データ、変更しない範囲、テストケース一覧である。P-1完了前にUI・D1・投稿受付を変更しない。
 
 ## 3. イマココナビから取り込むUX要件
 
@@ -93,6 +117,18 @@
 
 ## 5. 投稿・鮮度・安全性の仕様
 
+### 5.0 表示状態は3軸で管理する
+
+「verified」を一つのバッジにして、公式性と確認済みを混ぜない。災害板の公開projectionは少なくとも次の軸から導出する。
+
+```ts
+authority: "official" | "resident" | "operator" | "reference"
+review: "confirmed" | "unreviewed" | "disputed" | "unknown"
+freshness: "fresh" | "stale" | "unknown"
+```
+
+例: 店舗カードの住民報告は `authority=resident`、管理者が内容を確認しても `authority` は変えない。OpenNaviの公式ライフライン要約は `authority=official` だが、本文の確認時刻が古ければ `freshness=stale` になる。画面の「公式確認」「住民報告」「古い可能性」はこの3軸から導出する。
+
 ### 5.1 投稿の最小契約
 
 - 場所ID: 必須。自由な場所名の新規作成はしない
@@ -113,15 +149,32 @@
 
 ### 5.3 投稿制御
 
-- IPハッシュ＋場所IDのクールダウンを維持
+- Origin確認、短時間クールダウン、Turnstile等のbot対策を投稿再開の必須条件にする。現行POSTにはTurnstile検証がないため、再開前に追加する
+- IP由来の固定SHA-256を監査識別子として長期保存しない。クールダウン用は秘密鍵付きHMAC＋期間salt等の短期トークンにし、目的を終えたら削除する
 - 投稿停止、確認のみ、通常受付を環境・地域単位で切替可能にする
 - 通報・非表示・管理者確認の経路を追加する
 - 同じ内容の連続投稿をまとめ、最新1件だけをカード要約に出す
 - 住所、電話、SNS ID、個人名、待ち合わせ、救助依頼を保存しない
+- `role="owner"` は認証済みの店舗関係者を意味しない。認証を導入するまで表示は「店側の自己申告」に固定し、所有者確認済みとは表示しない
+- 監査に残すのは報告・操作イベントのハッシュと公開用operator IDであり、生IPや長期追跡可能な値ではない
 
 ## 6. 停電・断水の扱い
 
-災害板にOpenNaviと別の「公式停電・断水データベース」を作らない。二重管理と誤表示を避けるため、役割を分ける。
+災害板にOpenNaviと別の「公式停電・断水データベース」を作らない。二重管理と誤表示を避けるため、役割を分ける。住民報告のwrite ownershipは最終的に災害板へ一本化するが、既存OpenNavi `/lifelines` の移行が完了するまでは新規受付を再開しない。
+
+### 報告subjectを分ける
+
+既存の災害板 `reports` は `place_id` 必須で、店舗・施設カードの観測専用である。停電・断水は施設ではなく市町村／地区の事象なので、既存reportsへ無理に格納しない。
+
+```text
+place_reports
+  → 店舗・施設の「使えていた／制限があった」
+
+lifeline_reports
+  → 停電・断水の地区単位観測
+```
+
+当面のP2では `place_reports` の安全化を先に行い、`lifeline_reports` は別マイグレーション・別API・別保持期間として設計レビューを通す。`observedAt` と `confirmedAt` を同じ時刻に自動設定しない。
 
 ### 災害板で行うこと
 
@@ -136,20 +189,36 @@
 - 復旧見込み、影響軒数、給水車の公式発表
 - 自治体・水道事業者・送配電事業者の最新情報
 
-将来、地域全体の住民報告を災害板にも持たせる場合は、別設計（保持期間、地区粒度、相反報告、管理者責任）として承認を取る。今回の実装では場所カード報告に限定する。
+将来、地域全体の住民報告を災害板にも持たせる場合は、別設計（保持期間、地区粒度、相反報告、管理者責任、既存OpenNavi行の移行）として承認を取る。`lifeline_reports` を追加する場合も、公式状態へ自動昇格させない。
 
 ## 7. 実装フェーズ
 
-### P0 — 仕様・計測・テスト基盤
+### P-1 — Baseline / Contract Reconciliation（最初に実施）
 
-対象: `src/types.ts`、`src/reports.ts`、`src/html.ts`、`test/core.test.ts`。
+対象: `src/index.ts`、`src/reports.ts`、`src/opennavi.ts`、`src/cache.ts`、OpenNavi側の `/lifelines`・LINE・認証契約。
 
-- `observedAt`、`createdAt`、`freshness` の公開表現を定義
-- 公式／店側自己申告／見かけた人／未確認を共通ラベル化
-- 市区町村、カテゴリ、カード、投稿完了、公式リンククリックを匿名計測
+- 2.5節の差分表を実際の `main` とテストで確定
+- 住民報告のwrite ownership、legacy/read-only化、移行対象を決定
+- `place_reports` と将来の `lifeline_reports` の境界を固定
+- `authority / review / freshness` の表示projectionと、既存データの移行規則を確定
+- オフライン、Cache API、ETag、shadow modeの実装状態を再確認
+- 投稿再開の停止条件（Turnstile、短期HMAC、owner自己申告、保持期間）をテスト項目化
+
+受入条件: 「実装済みを再実装しない」「OpenNaviと災害板で同じ住民報告を二重に書かない」「公式性と確認状態を混同しない」の3点を、コード・API・テストで説明できる。
+
+### P0 — 共通契約・計測・テスト基盤
+
+対象: `src/types.ts`、`src/reports.ts`、`src/html.ts`、`test/core.test.ts`、新規 `src/telemetry.ts`。
+
+- `observedAt`、`createdAt`、`confirmedAt`、`freshness` の移行・公開表現を定義
+- `authority / review / freshness` から表示ラベルを導出
+- 住民報告・店側自己申告・OpenNavi公式リンク・参照台帳を別ラベル化
+- `area_open / need_select / official_open / report_submit / zero_result` を型付きallowlistで匿名計測
+- `time_to_first_action_ms` を利用者識別なしで計測可能にする
 - WebレスポンスにOpenNaviの内部キーや非公開フィールドが混入しないテストを追加
+- 災害モードではLINEの外部AI classifierを恒久的に呼ばない契約をOpenNavi側と確認
 
-受入条件: 現行の投稿制約を壊さず、既存テストを通過し、代表カードの状態・時刻・出典が一貫する。
+受入条件: 現行の投稿制約を壊さず、既存テストを通過し、代表カードのauthority・review・freshness・時刻・出典が一貫する。
 
 ### P1 — 被災者向け画面整理
 
@@ -165,47 +234,58 @@
 
 ### P2 — 報告体験と鮮度
 
-対象: `src/reports.ts`、`src/html.ts`、`migrations/`、`test/core.test.ts`。
+対象: `src/reports.ts`、`src/html.ts`、`migrations/`、`test/core.test.ts`。地域全体の停電・断水を受ける場合は、別途 `lifeline_reports` のmigration・API・テストを作る。
 
 - 観測時刻の入力・表示
 - 24〜72時間のstale表示
 - 「今もそう」「変わった」「復旧した」を短い選択肢で操作
 - 投稿後に個人情報・連絡先を含まないことを再検査
-- クールダウン、通報、非表示、管理者確認のテスト
+- クールダウン、Turnstile、通報、非表示、管理者確認のテスト
+- 既存のIP由来固定ハッシュを短期HMACへ移行し、保持期限を過ぎた識別子を削除
+- `role=owner` を自己申告と表示し、認証済み所有者と誤認させない
+- OpenNavi `/lifelines` の既存行は `observedAt` と `confirmedAt` を分けて移行する
 
-受入条件: 古い報告が営業中・開設中と誤表示されず、報告が公式情報として表示されない。
+受入条件: 古い報告が営業中・開設中と誤表示されず、報告が公式情報として表示されない。場所報告と地域ライフライン報告が同じテーブル・同じ契約に混在しない。
 
 ### P3 — オフライン・依存障害
 
-対象: `src/cache.ts`、`src/index.ts`、`src/html.ts`。
+対象: `src/cache.ts`、`src/index.ts`、`src/html.ts`。OpenNavi側のIndexedDBスナップショットとは責務を分ける。
 
+- Service Workerはshell／JS／CSS／iconだけをキャッシュし、災害板の町データを自動保存しない
+- 明示保存を導入する場合は、IndexedDBへ型付きの公開projectionだけを保存し、投稿・管理値・予約サービスURLを保存しない
 - OpenNaviの期限内スナップショットを、取得失敗時の読み取りフォールバックにする
 - 「いつ取得したデータか」「最新ではない」を明示
 - 投稿フォームは通信失敗時に完了扱いしない
 - OpenNaviが落ちた場合も公式ハブURLと固定の安全案内を返す
 - 印刷用の町ページ（公式リンク、緊急電話、時刻）を追加検討
+- `supportOfficial` のraw objectを再帰走査して「公式情報」と表示しない。`OfflineOfficialAction[]` の型付きprojectionを使い、旅行予約・応援購入等を除外する
 
-受入条件: OpenNavi 5xx、タイムアウト、キャッシュなし、通信断をテストし、推測データを表示しない。
+受入条件: OpenNavi 5xx、timeout、キャッシュなし、通信断をテストし、推測データを表示しない。通常閲覧だけでオフライン保存済みと誤表示しない。
 
 ### P4 — 負荷・費用
 
-対象: `src/cache.ts`、`src/opennavi.ts`、`src/index.ts`、`wrangler.jsonc`。
+対象: `src/cache.ts`、`src/opennavi.ts`、`src/index.ts`、`wrangler.jsonc`、OpenNavi `publicReadCache.ts`／board query。
 
 - 公開HTMLとOpenNavi依存GETのみ短期キャッシュ
 - 投稿POST、場所詳細の個人状態、管理操作はno-store
 - 市区町村ページの取得上限とページングを維持
 - 秒単位ポーリング、WebSocket、常時地図更新は導入しない
+- 場所詳細のETagはIDだけにせず、`updated_at` またはcontent hashを含める
+- `shadow` は「originから取得してcacheへ書くが、応答はoriginと比較する」動作に固定する。off→shadowでcacheが育たない実装は受入不可
+- キャッシュヒット率90%は、上位公開GET・warm状態・同一または主要日本POPの測定値として定義する。global hit rateとは呼ばない
+- OpenNaviと災害板が同一Cloudflare accountで運用される場合、Service Binding化を評価する。通常fetchのままにする場合はtimeout・ETag・再試行上限を明記する
 - GA4・Cloudflare使用量を日次確認し、キャッシュ・投稿受付を停止できるフラグを用意
 
-受入条件: ステージングで10／100／300 RPSを測定し、キャッシュヒット時p95 1秒以内、ミス時p95 2秒以内、5xx 0.1%未満を目標とする。
+受入条件: ステージングで10／100／300 RPSを測定し、キャッシュヒット時p95 1秒以内、ミス時p95 2秒以内、5xx 0.1%未満を目標とする。ETag更新、shadow書込、測定POP範囲の3点を記録する。
 
 ### P5 — 平時運用・次災害ドリル
 
-対象: `README.md`、新規 `docs/next-disaster-runbook.md`、`wrangler.jsonc`。
+対象: `README.md`、新規 `docs/next-disaster-runbook.md`、`wrangler.jsonc`、OpenNavi管理者認証・監査契約。
 
 - OpenNavi側の災害切替を前提に、災害板を別ドメインで立ち上げる手順を固定
 - `準備 → 公開 → 投稿受付 → 監視 → 収束` の状態を記録
 - 投稿受付の開始・停止、stale基準、通報対応、ロールバックをチェックリスト化
+- 共有ADMIN_TOKENだけに依存せず、担当者ごとのcredentialと公開用`actorId`を監査ログへ残す
 - 月1回、別県の設定でトップ→市区町村→カード→報告→収束を再現
 - 収束後は投稿受付を止め、公開ページを公式確認先中心へ戻す
 
@@ -213,12 +293,12 @@
 
 ## 8. 持続可能性・コスト
 
-- Cloudflare Worker + D1 + 静的HTMLを基本とし、平時は固定費中心にする
+- Cloudflare Worker + D1 + 静的HTMLを基本とし、平時はWorkers Paidの最低月額5ドル＋included usage内を目標にする
 - OpenNaviの公式リンクを利用し、Maps API・有料検索・チェーン自動取得を前提にしない
 - 生成AIは災害板のリクエスト経路に置かない。説明文・分類は決定論的にする
 - `PUBLIC_READ_CACHE=off / shadow / on` を使い、差分確認後にキャッシュを有効化する
 - 1ページ表示がOpenNavi全地域の取得へ連鎖しないよう、市区町村単位の遅延読み込みを守る
-- 月次でWorkerリクエスト、CPU、D1読取・書込、キャッシュヒット率を記録する
+- 月次でWorkerリクエスト、CPU、D1読取・書込、キャッシュヒット率を記録する。超過分は従量課金として別管理する
 - 追加課金が発生する変更は、月額上限・停止条件・ロールバックを先に決める
 
 ## 9. 受入KPI
@@ -231,6 +311,8 @@
 | 公式でない投稿の公式表示 | 0件 |
 | 個人情報・連絡先の保存 | 0件 |
 | OpenNavi障害時の誤表示 | 0件 |
+| 住民報告の二重write path | 0件 |
+| `authority` と `review` の混同表示 | 0件 |
 | 投稿受付停止の反映 | 5分以内 |
 | 災害立ち上げドリル | 60分以内 |
 
@@ -240,11 +322,12 @@
 
 実装時は次の単位で分け、各コミットを個別に検証する。
 
-1. `docs:` 計画・運用手順のみ
+1. `docs:` P-1差分表・計画・運用手順のみ
 2. `feat(ui):` 市区町村フィルタとカード表示（DB変更なし）
 3. `feat(report):` 観測時刻・鮮度・投稿制約（マイグレーションを含む場合は単独）
-4. `feat(resilience):` OpenNavi依存キャッシュと障害フォールバック
-5. `test:` E2E・負荷試験・次災害ドリル
+4. `feat(lifeline):` `lifeline_reports` を追加する場合は、place reportsと別migration・別APIで単独
+5. `feat(resilience):` OpenNavi依存キャッシュと障害フォールバック
+6. `test:` E2E・負荷試験・次災害ドリル
 
 各段階で `npm test`、`npm run typecheck`、公開URLのリンク検査を行う。災害板側の変更をOpenNaviリポジトリへ混ぜない。
 
@@ -260,10 +343,11 @@
 
 ## 12. 実装開始条件
 
-1. この計画を災害版リポジトリの正本として承認する
-2. 投稿受付の地域・期間・保持期間を決める
-3. iOS／Android実機確認者と、投稿通報の代替担当を決める
-4. Cloudflare費用上限とアラート先を確認する
-5. P0の状態語・鮮度基準・イベント名を確定する
+1. P-1の差分表と、災害板を住民報告のwrite ownerとする方針を承認する
+2. OpenNavi `/lifelines` のlegacy/read-only化または管理者専用化の移行計画を確定する
+3. 投稿受付の地域・期間・保持期間、Turnstile、短期HMAC、owner自己申告の扱いを決める
+4. iOS／Android実機確認者と、投稿通報・収束の代替担当を決める
+5. Cloudflare費用上限とアラート先を確認する
+6. P0のauthority／review／freshness、鮮度基準、型付きイベント名を確定する
 
-承認後はP0から開始し、P1〜P5を段階的に実装する。公開キャッシュの有効化と投稿受付の再開は、別々のリリース判断とする。
+承認後はP-1から開始し、P0〜P5を段階的に実装する。公開キャッシュの有効化、地域ライフライン報告の追加、投稿受付の再開は、別々のリリース判断とする。
