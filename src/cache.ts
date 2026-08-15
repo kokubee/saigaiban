@@ -53,45 +53,44 @@ export async function getCachedJson(
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), OPENNAVI_FETCH_TIMEOUT_MS);
-  let res: Response;
   try {
-    res = await fetch(url, {
+    const res = await fetch(url, {
       headers: { Accept: "application/json", "User-Agent": "saigaiban/0.1 (+https://saigaiban.com)" },
       signal: controller.signal,
     });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`opennavi ${res.status} ${url}`);
+
+    const declaredLength = Number(res.headers.get("content-length") || "0");
+    if (declaredLength > MAX_OPENNAVI_JSON_BYTES) throw new Error(`opennavi response too large ${url}`);
+    const body = await readBoundedText(res, MAX_OPENNAVI_JSON_BYTES);
+    if (cache && mode === "shadow" && shadowHit) {
+      try {
+        const cachedBody = await shadowHit.text();
+        console.log(JSON.stringify({ event: "opennavi_cache_shadow_compare", same: cachedBody === body }));
+      } catch {
+        console.log(JSON.stringify({ event: "opennavi_cache_shadow_compare", same: false }));
+      }
+    }
+    if (cache && (mode === "on" || mode === "shadow")) {
+      // The header is useful to downstream HTTP caches; Cache API match/put
+      // itself does not implement stale-while-revalidate.
+      const headers = new Headers({
+        "Content-Type": res.headers.get("Content-Type") || "application/json",
+        ...(res.headers.get("ETag") ? { ETag: res.headers.get("ETag") as string } : {}),
+        ...(res.headers.get("Last-Modified") ? { "Last-Modified": res.headers.get("Last-Modified") as string } : {}),
+        "Cache-Control": `public, max-age=${maxAgeSeconds}, s-maxage=${maxAgeSeconds}, stale-while-revalidate=${staleWhileRevalidateSeconds}`,
+      });
+      try {
+        await cache.put(key, new Response(body, { status: 200, headers }));
+      } catch {
+        // Cache failure must never turn a valid upstream response into a 5xx.
+      }
+    }
+    return JSON.parse(body) as unknown;
   } finally {
     clearTimeout(timeoutId);
   }
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`opennavi ${res.status} ${url}`);
-
-  const declaredLength = Number(res.headers.get("content-length") || "0");
-  if (declaredLength > MAX_OPENNAVI_JSON_BYTES) throw new Error(`opennavi response too large ${url}`);
-  const body = await readBoundedText(res, MAX_OPENNAVI_JSON_BYTES);
-  if (cache && mode === "shadow" && shadowHit) {
-    try {
-      const cachedBody = await shadowHit.text();
-      console.log(JSON.stringify({ event: "opennavi_cache_shadow_compare", same: cachedBody === body }));
-    } catch {
-      console.log(JSON.stringify({ event: "opennavi_cache_shadow_compare", same: false }));
-    }
-  }
-  if (cache && (mode === "on" || mode === "shadow")) {
-    // The header is useful to downstream HTTP caches; Cache API match/put
-    // itself does not implement stale-while-revalidate.
-    const headers = new Headers({
-      "Content-Type": res.headers.get("Content-Type") || "application/json",
-      ...(res.headers.get("ETag") ? { ETag: res.headers.get("ETag") as string } : {}),
-      ...(res.headers.get("Last-Modified") ? { "Last-Modified": res.headers.get("Last-Modified") as string } : {}),
-      "Cache-Control": `public, max-age=${maxAgeSeconds}, s-maxage=${maxAgeSeconds}, stale-while-revalidate=${staleWhileRevalidateSeconds}`,
-    });
-    try {
-      await cache.put(key, new Response(body, { status: 200, headers }));
-    } catch {
-      // Cache failure must never turn a valid upstream response into a 5xx.
-    }
-  }
-  return JSON.parse(body) as unknown;
 }
 
 async function readBoundedText(response: Response, maxBytes: number): Promise<string> {

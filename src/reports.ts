@@ -217,7 +217,7 @@ export async function flagReport(
   const recent = await db
     .prepare(
       `SELECT id FROM report_flags
-         WHERE report_id = ? AND ip_hash = ? AND created_at > datetime('now', '-10 minutes')
+         WHERE report_id = ? AND ip_hash = ? AND julianday(created_at) > julianday('now', '-10 minutes')
          LIMIT 1`,
     )
     .bind(reportId, ipHash)
@@ -238,23 +238,15 @@ export async function moderateReport(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const report = await db.prepare("SELECT id FROM reports WHERE id = ? LIMIT 1").bind(reportId).first<{ id: string }>();
   if (!report) return { ok: false, error: "報告が見つかりません。" };
-  const moderation = action === "hide" ? "hidden" : "visible";
   const review = action === "confirm" ? "confirmed" : action === "dispute" ? "disputed" : action === "dismiss" ? "unknown" : null;
-  if (review) {
-    await db
-      .prepare("UPDATE reports SET moderation_status = ?, review_status = ?, moderated_at = ?, moderated_by = ? WHERE id = ?")
-      .bind(moderation, review, new Date().toISOString(), actorId, reportId)
-      .run();
-  } else {
-    await db
-      .prepare("UPDATE reports SET moderation_status = ?, moderated_at = ?, moderated_by = ? WHERE id = ?")
-      .bind(moderation, new Date().toISOString(), actorId, reportId)
-      .run();
-  }
-  await db
+  const now = new Date().toISOString();
+  const update = review
+    ? db.prepare("UPDATE reports SET review_status = ?, moderated_at = ?, moderated_by = ? WHERE id = ?").bind(review, now, actorId, reportId)
+    : db.prepare("UPDATE reports SET moderation_status = ?, moderated_at = ?, moderated_by = ? WHERE id = ?").bind(action === "hide" ? "hidden" : "visible", now, actorId, reportId);
+  const audit = db
     .prepare("INSERT INTO moderation_audit (id, report_id, action, actor_id, created_at) VALUES (?, ?, ?, ?, ?)")
-    .bind(crypto.randomUUID(), reportId, action, actorId, new Date().toISOString())
-    .run();
+    .bind(crypto.randomUUID(), reportId, action, actorId, now);
+  await db.batch([update, audit]);
   return { ok: true };
 }
 

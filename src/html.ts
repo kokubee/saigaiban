@@ -251,6 +251,7 @@ export function renderPlace(
   measurementId?: string | null,
   allowPosting = false,
   turnstileSiteKey?: string | null,
+  allowReporting = false,
 ): string {
   const area = meta.areas.find((a) => a.slug === slug);
   const nameJa = area?.nameJa || slug;
@@ -267,7 +268,7 @@ export function renderPlace(
             const note = r.note ? ` — ${escapeHtml(r.note)}` : "";
             const maps = r.prefer_maps ? " / 地図へ寄せる" : "";
             const evidence = r.evidence || { authority: r.role === "owner" ? "operator" : "resident", review: "unknown", freshness: "unknown" } as const;
-            const flag = `<form class="flag" method="post" action="/api/reports/${escapeHtml(r.id)}/flag"><select name="reason" aria-label="通報理由"><option value="misleading">内容が不正確</option><option value="privacy">個人情報</option><option value="unsafe">危険な内容</option><option value="other">その他</option></select><button type="submit">通報</button></form>`;
+            const flag = allowReporting ? `<form class="flag" method="post" action="/api/reports/${escapeHtml(r.id)}/flag"><select name="reason" aria-label="通報理由"><option value="misleading">内容が不正確</option><option value="privacy">個人情報</option><option value="unsafe">危険な内容</option><option value="other">その他</option></select><button type="submit">通報</button></form>` : "";
             return `<li>${escapeHtml(formatWhen(r.created_at))}　${escapeHtml(who)}　${escapeHtml(VERDICT_LABEL[r.verdict])}　${escapeHtml(evidenceLabel(evidence))}${maps}${note}${flag}</li>`;
           })
           .join("")}</ul>`;

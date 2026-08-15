@@ -3,7 +3,7 @@
 作成日: 2026-08-15／レビュー反映: 2026-08-16
 対象リポジトリ: `/Users/kokubee/code2026/saigaiban`  
 基準コミット: `382b1b7 feat: separate disaster board support navigation`  
-状態: 条件付き承認。P-1（現行実装との差分固定）は `docs/implementation-baseline-20260816.md` に記録済み。P0は証拠・鮮度projection、値検証付きテレメトリallowlist、既定OFFの投稿受付ゲート、読み取り専用表示、外部取得前のPOST拒否、fail-closedなTurnstileサーバー検証、短期HMACと識別子保持期限処理、shadowキャッシュ契約、通報・非表示・管理者確認経路まで実装済み。write ownershipの承認、D1 migration適用、Turnstile/HMAC秘密の本番設定、実DBでのcron確認が残る。コード変更・D1変更・デプロイは、各フェーズの受入条件を確認してから行う。
+状態: 条件付き承認。P-1（現行実装との差分固定）は `docs/implementation-baseline-20260816.md` に記録済み。P0は証拠・鮮度projection、値検証付きテレメトリallowlist、既定OFFの投稿受付ゲート、読み取り専用表示、外部取得前のPOST拒否、fail-closedなTurnstileサーバー検証、短期HMACと識別子保持期限処理、shadowキャッシュ契約、通報・非表示・管理者確認経路まで実装済み。今回の追補で、公開状態／レビュー状態の独立更新、報告更新＋監査のD1 batch原子性、通報UIのHMAC準備ゲート、本文読み取りを含む外部取得timeout、SQLite日時比較、通報303復帰を実装した。**0003 migrationの先行適用、通報を有効にする場合のHMAC secret・実D1監査確認が済むまで、`PUBLIC_POSTING_MODE=off` でも本番デプロイはHOLD**。write ownershipの承認、Turnstile/HMAC秘密の本番設定、実DBでのcron確認も残る。コード変更・D1変更・デプロイは、各フェーズの受入条件を確認してから行う。
 
 ## 1. 災害板の役割
 

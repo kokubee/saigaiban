@@ -37,6 +37,7 @@ export default {
     const turnstileAllowedHostnames = turnstileHostnames(env.PUBLIC_TURNSTILE_HOSTNAMES);
     const turnstileReady = turnstileConfigured(env.TURNSTILE_SECRET_KEY, turnstileSiteKey, turnstileAllowedHostnames);
     const postingEnabled = publicPostingEnabled(env.PUBLIC_POSTING_MODE) && turnstileReady && rateLimitConfigured(env.RATE_LIMIT_HMAC_SECRET);
+    const reportingEnabled = rateLimitConfigured(env.RATE_LIMIT_HMAC_SECRET);
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
     try {
@@ -89,7 +90,7 @@ export default {
         }
         const notice = url.searchParams.get("ok") === "1" ? "受け取りました。公式ではありません。地図と公式ハブも見てください。" : url.searchParams.get("err");
         const reports = await listReports(env.DB, place.id);
-        return html(renderPlace(site, origin, meta, slug, place, reports, notice, measurementId, postingEnabled, turnstileSiteKey), 200, "private, no-store");
+        return html(renderPlace(site, origin, meta, slug, place, reports, notice, measurementId, postingEnabled, turnstileSiteKey, reportingEnabled), 200, "private, no-store");
       }
 
       const town = path.match(/^\/a\/([a-z0-9-]+)$/);
@@ -173,17 +174,29 @@ async function handlePost(
 }
 
 async function handleFlag(request: Request, env: Env, site: string, reportId: string): Promise<Response> {
-  if (!allowedOrigin(request, site)) return json({ ok: false, error: "この画面から送ってください。" }, 403);
-  if (!reportRequestHeadersAllowed(request)) return json({ ok: false, error: "通報データの形式またはサイズが不正です。" }, 413);
+  const back = (message?: string): Response => {
+    let target = new URL(site);
+    try {
+      const referer = request.headers.get("Referer");
+      const candidate = referer ? new URL(referer) : null;
+      if (candidate && candidate.origin === target.origin) target = candidate;
+    } catch {
+      // Use the site root for malformed or cross-origin referers.
+    }
+    target.searchParams.set(message ? "err" : "flag", message || "1");
+    return Response.redirect(target.toString(), 303);
+  };
+  if (!allowedOrigin(request, site)) return back("この画面から送ってください。");
+  if (!reportRequestHeadersAllowed(request)) return back("通報データの形式またはサイズが不正です。");
   const ip = request.headers.get("CF-Connecting-IP")?.trim();
-  if (!ip) return json({ ok: false, error: "この接続では通報を受け付けられません。" }, 400);
+  if (!ip) return back("この接続では通報を受け付けられません。");
   const token = await shortIpHmac(ip, env.RATE_LIMIT_HMAC_SECRET);
-  if (!token) return json({ ok: false, error: "通報受付の準備ができていません。" }, 503);
+  if (!token) return back("通報受付の準備ができていません。");
   const form = await request.formData();
   const reason = parseFlagReason(form.get("reason"));
-  if (!reason) return json({ ok: false, error: "通報理由を選んでください。" }, 400);
+  if (!reason) return back("通報理由を選んでください。");
   const result = await flagReport(env.DB, reportId, reason, token);
-  return result.ok ? json({ ok: true }, 202) : json(result, 400);
+  return result.ok ? back() : back(result.error);
 }
 
 async function handleModeration(request: Request, env: Env, reportId: string): Promise<Response> {

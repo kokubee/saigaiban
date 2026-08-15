@@ -6,7 +6,7 @@ import { escapeHtml, gaSnippet, renderHome, renderPlace, renderTown } from "../s
 import { categoryLabel, isShelter } from "../src/labels.ts";
 import { googleMapsSearchUrl } from "../src/maps.ts";
 import { officialHubUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
-import { cleanNote, parseFlagReason, parseModerationAction, parseVerdict, resolvePost } from "../src/reports.ts";
+import { cleanNote, flagReport, moderateReport, parseFlagReason, parseModerationAction, parseVerdict, resolvePost } from "../src/reports.ts";
 import { publicPostingEnabled, publicPostingMode } from "../src/posting.ts";
 import { purgeExpiredIpHashes, rateLimitConfigured, shortIpHmac } from "../src/rate-limit.ts";
 import { reportRequestHeadersAllowed } from "../src/request.ts";
@@ -226,6 +226,61 @@ test("place page hides the report form while public posting is closed", () => {
   const townHtml = renderTown("https://saigaiban.com", "https://opennavi.org", meta, "mobara", [place], false, new Map(), null, false);
   assert.doesNotMatch(townHtml, /いまどうかを書く/);
   assert.match(townHtml, /これまでの報告を見る/);
+});
+
+test("reporting UI is hidden until the independent HMAC gate is ready", () => {
+  const meta = {
+    disaster: { id: "r8-chiba-heavy-rain", label: "令和8年千葉県豪雨" },
+    areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" }],
+  };
+  const place = {
+    id: "place-1234", seed_key: "spot:conv:mobara:店", name: "テスト店", area: "mobara", category: "conv",
+    lat: null, lng: null, address: null, source: "openstreetmap", data_basis_date: null, identity_only: true, maps_url: "",
+  };
+  const report = { id: "report-1234", place_id: place.id, area: "mobara", seed_key: place.seed_key, verdict: "open" as const, note: null, created_at: "2026-08-16T01:00:00Z", role: "visitor" as const, prefer_maps: false };
+  const hidden = renderPlace("https://saigaiban.com", "https://opennavi.org", meta, "mobara", place, [report], null, null, false, null, false);
+  assert.doesNotMatch(hidden, /\/api\/reports\/report-1234\/flag/);
+  const ready = renderPlace("https://saigaiban.com", "https://opennavi.org", meta, "mobara", place, [report], null, null, false, null, true);
+  assert.match(ready, /\/api\/reports\/report-1234\/flag/);
+});
+
+test("moderation preserves publication and review state independently and audits atomically", async () => {
+  const sqls: string[] = [];
+  const db = {
+    prepare(sql: string) {
+      sqls.push(sql);
+      return {
+        bind(..._args: unknown[]) {
+          return { first: async () => ({ id: "report-1" }), run: async () => ({ success: true }) };
+        },
+      };
+    },
+    batch: async (statements: unknown[]) => {
+      sqls.push(`batch:${statements.length}`);
+      return [];
+    },
+  } as unknown as D1Database;
+  assert.deepEqual(await moderateReport(db, "report-1", "confirm", "moderator"), { ok: true });
+  assert.match(sqls.find((sql) => sql.includes("UPDATE reports")) || "", /review_status/);
+  assert.doesNotMatch(sqls.find((sql) => sql.includes("UPDATE reports")) || "", /moderation_status/);
+  assert.ok(sqls.includes("batch:2"));
+  sqls.length = 0;
+  await moderateReport(db, "report-1", "hide", "moderator");
+  assert.match(sqls.find((sql) => sql.includes("UPDATE reports")) || "", /moderation_status/);
+  assert.doesNotMatch(sqls.find((sql) => sql.includes("UPDATE reports")) || "", /review_status/);
+});
+
+test("flag cooldown uses SQLite julianday arithmetic", async () => {
+  const sqls: string[] = [];
+  const db = {
+    prepare(sql: string) {
+      sqls.push(sql);
+      return { bind() { return { first: async () => sql.includes("FROM reports") ? ({ id: "report-1" }) : null, run: async () => ({ success: true }) }; } };
+    },
+  } as unknown as D1Database;
+  const result = await flagReport(db, "report-1", "other", "ip-hash");
+  assert.deepEqual(result, { ok: true });
+  assert.match(sqls.find((sql) => sql.includes("report_flags")) || "", /julianday\(created_at\)/);
 });
 
 test("POST rejects before OpenNavi or D1 access while public posting is closed", async () => {

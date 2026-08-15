@@ -10,7 +10,7 @@ P0読み取り専用追補: `9501d27`（既知値検証、OFF時文言、外部�
 P0 Turnstile追補: `15ad074`（siteverify、失敗時停止、フォームwidget、検証テスト）
 P0 HMAC追補: `889fbda`（日次ローテーションHMAC、24時間識別子保持、定期削除）
 P0 cache追補: `57d3245`（shadow書込、origin応答、ETag／Last-Modified保持、差分ログ）
-P0 moderation／request追補: `c6b655e`（通報・非表示・管理者確認、本文上限、Turnstile厳格検証、CFヘッダ、fetch timeout）
+P0 moderation／request追補: 次コミット（通報・非表示・管理者確認、本文上限、Turnstile厳格検証、CFヘッダ、fetch timeout）
 
 ## 1. P-1の判定
 
@@ -82,7 +82,11 @@ P0ではこのprojectionを追加し、「店側が入力した」ことと「�
 | IP識別子 | 日次HMACを`ip_hash`へ保存し、24時間超でNULL化 | cron実行とsecret設定を確認 |
 | owner判定 | フォーム値を自己申告として保存 | 認証済み所有者と表示しない |
 | 内容制限 | URL、電話、連絡先、待ち合わせ等を拒否 | 既存テストを維持・拡張 |
-| 通報・非表示 | `0003_moderation.sql`、`/api/reports/:id/flag`、`/api/admin/reports/:id/moderate`を実装 | migration適用、実D1の監査確認、管理secret設定 |
+| 通報・非表示 | `0003_moderation.sql`、`/api/reports/:id/flag`、`/api/admin/reports/:id/moderate`を実装。公開状態とレビュー状態を独立更新し、更新＋監査をD1 batchで原子的に実行 | **どの設定のデプロイでもmigrationを先に適用**、実D1の監査確認、管理secret設定 |
+
+`0003_moderation.sql` は投稿受付の再開条件ではなく、今回のWorkerコードをデプロイする前提条件である。通常GETが新しい列をSELECTし、毎時cronが同じテーブルを更新するため、`PUBLIC_POSTING_MODE=off` でも未適用DBへコードだけを出してはならない。Cloudflare APIのmigration一覧は認可エラー（7403）で未確認のため、現時点では本番デプロイをHOLDする。
+
+通報UIは投稿受付と独立している。`RATE_LIMIT_HMAC_SECRET` が設定済みのときだけフォームを表示し、未設定時は503になるボタンを公開しない。通報を有効にする場合も、migration・secret・実D1監査確認を読み取り専用デプロイの前提に含める。
 
 P2では、`observedAt` と `confirmedAt` を同一時刻に自動設定しない。既存行は `created_at` を観測・投稿時刻の暫定値とし、確認時刻は別に扱う移行規則を決める。
 
@@ -122,6 +126,10 @@ P0実装時に、最低限次のテストを追加する。
 13. 本文Content-Length・Content-Type上限が`formData()`前に適用される
 14. Turnstileのtoken長、action、hostname、timeout、非2xx、不正JSONがすべて拒否される
 15. 通報・管理操作が理由／操作allowlistと認証を通り、非表示行が公開一覧から除かれる
+16. `hide`／`restore` は公開状態だけ、`confirm`／`dispute`／`dismiss` はレビュー状態だけを更新し、非表示報告をレビュー操作で再公開しない
+17. 報告更新と監査INSERTが同じD1 `batch()` で実行され、監査失敗時に状態変更を残さない
+18. 通報の10分制限がSQLite `julianday()` で比較され、日時文字列形式に依存しない
+19. 通報成功時は303で同一画面へ戻り、Refererは同一origin以外へリダイレクトしない
 
 ## 7. P-1で変更しないもの
 
@@ -131,4 +139,4 @@ P0実装時に、最低限次のテストを追加する。
 - 外部支援・旅行プロバイダへの送信
 - 投稿受付の再開
 
-P-1のベースラインをもとに、P0追補では投稿受付を既定OFFに固定した。`PUBLIC_POSTING_MODE=on` は、write ownershipの承認、D1 migration適用後の実DB確認、Turnstile・短期HMAC・保持期限・moderation監査の運用確認後に限って有効化する。OpenNavi側の変更はこのリポジトリへ混ぜない。
+P-1のベースラインをもとに、P0追補では投稿受付を既定OFFに固定した。`PUBLIC_POSTING_MODE=on` は、write ownershipの承認、D1 migration適用後の実DB確認、Turnstile・短期HMAC・保持期限・moderation監査の運用確認後に限って有効化する。**読み取り専用のデプロイも、0003先行適用と通報を有効にする場合のHMAC／実D1確認が済むまでHOLD**とする。OpenNavi側の変更はこのリポジトリへ混ぜない。
