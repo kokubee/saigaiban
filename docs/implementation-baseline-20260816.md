@@ -7,6 +7,7 @@
 P0初回実装: `dc93a54`（証拠・鮮度projection、テレメトリallowlist）
 P0安全化追補: `b339277`（投稿受付ゲート、テレメトリ値検証、鮮度期限、店側カード表示）
 P0読み取り専用追補: `9501d27`（既知値検証、OFF時文言、外部取得前拒否、D1書込みゼロテスト）
+P0 Turnstile追補: `15ad074`（siteverify、失敗時停止、フォームwidget、検証テスト）
 
 ## 1. P-1の判定
 
@@ -74,7 +75,7 @@ P0ではこのprojectionを追加し、「店側が入力した」ことと「�
 |---|---|---|
 | Origin/Referer | `allowedOrigin()` で確認 | 維持 |
 | クールダウン | IPハッシュ＋場所ID、10分 | 期間salt付きHMACへ移行 |
-| bot対策 | POST経路にTurnstileなし | Turnstile等を追加 |
+| bot対策 | Turnstileのsiteverifyを実装済み。鍵未設定時は受付停止 | secret/site keyを本番secretとして設定し、実検証を確認 |
 | IP識別子 | `SHA-256("saigaiban:"+IP)`を保存 | 短期用途に限定し、期限後削除 |
 | owner判定 | フォーム値を自己申告として保存 | 認証済み所有者と表示しない |
 | 内容制限 | URL、電話、連絡先、待ち合わせ等を拒否 | 既存テストを維持・拡張 |

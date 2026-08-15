@@ -3,7 +3,7 @@
 作成日: 2026-08-15／レビュー反映: 2026-08-16
 対象リポジトリ: `/Users/kokubee/code2026/saigaiban`  
 基準コミット: `382b1b7 feat: separate disaster board support navigation`  
-状態: 条件付き承認。P-1（現行実装との差分固定）は `docs/implementation-baseline-20260816.md` に記録済み。P0は証拠・鮮度projection、値検証付きテレメトリallowlist、既定OFFの投稿受付ゲート、読み取り専用表示、外部取得前のPOST拒否まで実装済み。write ownershipの承認、Turnstile・短期HMAC・保持期限、キャッシュ契約が残る。コード変更・D1変更・デプロイは、各フェーズの受入条件を確認してから行う。
+状態: 条件付き承認。P-1（現行実装との差分固定）は `docs/implementation-baseline-20260816.md` に記録済み。P0は証拠・鮮度projection、値検証付きテレメトリallowlist、既定OFFの投稿受付ゲート、読み取り専用表示、外部取得前のPOST拒否、fail-closedなTurnstileサーバー検証まで実装済み。write ownershipの承認、Turnstile鍵設定、短期HMAC・保持期限、キャッシュ契約が残る。コード変更・D1変更・デプロイは、各フェーズの受入条件を確認してから行う。
 
 ## 1. 災害板の役割
 
@@ -220,12 +220,13 @@ lifeline_reports
 - 鮮度は24時間以内=`fresh`、24〜72時間=`stale`、72時間超=`expired`、未来・不正時刻=`unknown` とする
 - 店側自己申告カードにもauthority・review・freshnessのラベルを表示する
 - 投稿OFF時は市区町村・場所詳細を「これまでの報告を見る」へ切り替え、POSTはOpenNavi・D1へ触れる前に拒否する
+- Turnstileはサーバー側siteverifyを必須にし、秘密鍵・site keyの欠落、検証失敗、検証API障害をすべて受付停止として扱う
 - WebレスポンスにOpenNaviの内部キーや非公開フィールドが混入しないテストを追加
 - 災害モードではLINEの外部AI classifierを恒久的に呼ばない契約をOpenNavi側と確認
 
 受入条件: 現行の投稿制約を壊さず、既存テストを通過し、代表カードのauthority・review・freshness・時刻・出典が一貫する。
 
-P0残作業の順序は、write ownershipの文書承認（OpenNavi側は別リポジトリ・別承認）、Turnstile、短期HMACと保持期限・削除処理、最後にキャッシュ契約の独立コミットとする。投稿受付を `on` に変更するデプロイは、前3項の受入条件を満たすまで行わない。
+P0残作業の順序は、write ownershipの文書承認（OpenNavi側は別リポジトリ・別承認）、Turnstile鍵の安全な設定確認、短期HMACと保持期限・削除処理、最後にキャッシュ契約の独立コミットとする。投稿受付を `on` に変更するデプロイは、前3項の受入条件を満たすまで行わない。
 
 ### P1 — 被災者向け画面整理
 
