@@ -9,6 +9,7 @@ P0安全化追補: `b339277`（投稿受付ゲート、テレメトリ値検証�
 P0読み取り専用追補: `9501d27`（既知値検証、OFF時文言、外部取得前拒否、D1書込みゼロテスト）
 P0 Turnstile追補: `15ad074`（siteverify、失敗時停止、フォームwidget、検証テスト）
 P0 HMAC追補: `889fbda`（日次ローテーションHMAC、24時間識別子保持、定期削除）
+P0 cache追補: `57d3245`（shadow書込、origin応答、ETag／Last-Modified保持、差分ログ）
 
 ## 1. P-1の判定
 
@@ -92,7 +93,7 @@ P2では、`observedAt` と `confirmedAt` を同一時刻に自動設定しな�
 - HTML公開レスポンスは既定 `public, max-age=60`
 - 場所詳細POSTは書き込み後にリダイレクトし、成功表示をクエリで返す
 - OpenNavi依存のCache APIは `PUBLIC_READ_CACHE=off` が既定
-- `shadow` は現状、cacheへ書かずorigin応答を返す。P4で「書くが返さない＋差分測定」に変更する
+- `shadow` はoriginを返しながらcacheへ書き、既存cacheとの差分を測定する。ETag／Last-Modifiedもcacheへ保持する
 - OpenNavi依存fetchにETag、timeout、再試行上限はない
 
 ### OpenNaviとの境界
@@ -112,7 +113,7 @@ P0実装時に、最低限次のテストを追加する。
 5. URL・電話・個人連絡先・待ち合わせが保存されない
 6. OpenNaviの非公開キー（`hidden`, `owner_uid`, `review_status`等）が災害板へ流れない
 7. OpenNavi 5xx／timeout／不正JSON時に推測データを返さない
-8. `PUBLIC_READ_CACHE=shadow` の挙動が「cacheへ書く・originを返す・差分を測る」になる
+8. `PUBLIC_READ_CACHE=shadow` の挙動が「cacheへ書く・originを返す・差分を測る」になる（P0実装済み）
 9. `place_reports` に地域全体の停電・断水レコードを混在させない
 10. telemetryがallowlist外のキー、未知の地域・カテゴリ・need・kind・verdict、本文を送信しない
 11. 投稿OFFのPOSTがOpenNavi取得とD1書込みの前に拒否される

@@ -3,7 +3,7 @@
 作成日: 2026-08-15／レビュー反映: 2026-08-16
 対象リポジトリ: `/Users/kokubee/code2026/saigaiban`  
 基準コミット: `382b1b7 feat: separate disaster board support navigation`  
-状態: 条件付き承認。P-1（現行実装との差分固定）は `docs/implementation-baseline-20260816.md` に記録済み。P0は証拠・鮮度projection、値検証付きテレメトリallowlist、既定OFFの投稿受付ゲート、読み取り専用表示、外部取得前のPOST拒否、fail-closedなTurnstileサーバー検証、短期HMACと識別子保持期限処理まで実装済み。write ownershipの承認、Turnstile/HMAC秘密の本番設定、キャッシュ契約が残る。コード変更・D1変更・デプロイは、各フェーズの受入条件を確認してから行う。
+状態: 条件付き承認。P-1（現行実装との差分固定）は `docs/implementation-baseline-20260816.md` に記録済み。P0は証拠・鮮度projection、値検証付きテレメトリallowlist、既定OFFの投稿受付ゲート、読み取り専用表示、外部取得前のPOST拒否、fail-closedなTurnstileサーバー検証、短期HMACと識別子保持期限処理、shadowキャッシュ契約まで実装済み。write ownershipの承認、Turnstile/HMAC秘密の本番設定が残る。コード変更・D1変更・デプロイは、各フェーズの受入条件を確認してから行う。
 
 ## 1. 災害板の役割
 
@@ -226,7 +226,7 @@ lifeline_reports
 
 受入条件: 現行の投稿制約を壊さず、既存テストを通過し、代表カードのauthority・review・freshness・時刻・出典が一貫する。
 
-P0残作業の順序は、write ownershipの文書承認（OpenNavi側は別リポジトリ・別承認）、Turnstile/HMAC秘密の安全な設定確認、最後にキャッシュ契約の独立コミットとする。投稿受付を `on` に変更するデプロイは、前2項の受入条件を満たすまで行わない。
+P0残作業は、write ownershipの文書承認（OpenNavi側は別リポジトリ・別承認）と、Turnstile/HMAC秘密の安全な設定確認である。投稿受付を `on` に変更するデプロイは、両項の受入条件を満たすまで行わない。
 
 ### P1 — 被災者向け画面整理
 
@@ -279,7 +279,7 @@ P0残作業の順序は、write ownershipの文書承認（OpenNavi側は別リ�
 - 市区町村ページの取得上限とページングを維持
 - 秒単位ポーリング、WebSocket、常時地図更新は導入しない
 - 場所詳細のETagはIDだけにせず、`updated_at` またはcontent hashを含める
-- `shadow` は「originから取得してcacheへ書くが、応答はoriginと比較する」動作に固定する。off→shadowでcacheが育たない実装は受入不可
+- [P0実装済み] `shadow` はoriginから取得してcacheへ書き、既存cacheとの差分を測定しつつ応答はoriginに固定する。off→shadowでcacheが育たない実装は受入不可
 - キャッシュヒット率90%は、上位公開GET・warm状態・同一または主要日本POPの測定値として定義する。global hit rateとは呼ばない
 - OpenNaviと災害板が同一Cloudflare accountで運用される場合、Service Binding化を評価する。通常fetchのままにする場合はtimeout・ETag・再試行上限を明記する
 - GA4・Cloudflare使用量を日次確認し、キャッシュ・投稿受付を停止できるフラグを用意
