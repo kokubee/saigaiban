@@ -215,10 +215,16 @@ lifeline_reports
 - 住民報告・店側自己申告・OpenNavi公式リンク・参照台帳を別ラベル化
 - `area_open / need_select / official_open / report_submit / zero_result` を型付きallowlistで匿名計測
 - `time_to_first_action_ms` を利用者識別なしで計測可能にする
+- 公開投稿は `PUBLIC_POSTING_MODE=off` を既定値とし、off時はフォームを出さずPOSTも受け付けない
+- telemetryの地域slug・カテゴリ・verdict・経過時間を値レベルで検証し、自由文を破棄する
+- 鮮度は24時間以内=`fresh`、24〜72時間=`stale`、72時間超=`expired`、未来・不正時刻=`unknown` とする
+- 店側自己申告カードにもauthority・review・freshnessのラベルを表示する
 - WebレスポンスにOpenNaviの内部キーや非公開フィールドが混入しないテストを追加
 - 災害モードではLINEの外部AI classifierを恒久的に呼ばない契約をOpenNavi側と確認
 
 受入条件: 現行の投稿制約を壊さず、既存テストを通過し、代表カードのauthority・review・freshness・時刻・出典が一貫する。
+
+P0残作業の順序は、write ownershipの文書承認（OpenNavi側は別リポジトリ・別承認）、Turnstile、短期HMACと保持期限・削除処理、最後にキャッシュ契約の独立コミットとする。投稿受付を `on` に変更するデプロイは、前3項の受入条件を満たすまで行わない。
 
 ### P1 — 被災者向け画面整理
 
