@@ -20,14 +20,15 @@ export function publicPostingEnabled(raw?: string): boolean {
 }
 
 /**
- * Parse the explicit disaster-area allowlist. Invalid or empty entries are
- * ignored so a typo can never widen the posting surface.
+ * Parse the explicit disaster-area allowlist. Any invalid or empty entry
+ * invalidates the entire list so a typo can never leave a partial opening.
  */
 export function publicPostingAreas(raw?: string): ReadonlySet<string> {
   const areas = new Set<string>();
   for (const entry of String(raw || "").split(",")) {
     const slug = normalizeAreaSlug(entry);
-    if (slug) areas.add(slug);
+    if (!slug) return new Set<string>();
+    areas.add(slug);
   }
   return areas;
 }

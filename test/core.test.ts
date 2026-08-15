@@ -126,7 +126,7 @@ test("public posting is closed unless explicitly enabled", () => {
 });
 
 test("public posting requires an explicit valid area allowlist", () => {
-  const areas = publicPostingAreas(" mobara, OAMISHIRASATO, bad/slug, --, mobara ");
+  const areas = publicPostingAreas(" mobara, OAMISHIRASATO, mobara ");
   assert.deepEqual([...areas], ["mobara", "oamishirasato"]);
   assert.equal(publicPostingEnabledForArea("on", "mobara", areas), true);
   assert.equal(publicPostingEnabledForArea("on", "oamishirasato", areas), true);
@@ -134,6 +134,8 @@ test("public posting requires an explicit valid area allowlist", () => {
   assert.equal(publicPostingEnabledForArea("off", "mobara", areas), false);
   assert.equal(publicPostingEnabledForArea("on", "bad/slug", areas), false);
   assert.equal(publicPostingEnabledForArea("on", "mobara", new Set()), false);
+  assert.deepEqual([...publicPostingAreas("mobara,bad/slug")], []);
+  assert.deepEqual([...publicPostingAreas("mobara,,oamishirasato")], []);
 });
 
 test("Turnstile must be configured and verified before intake can open", async () => {
