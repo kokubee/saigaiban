@@ -13,5 +13,13 @@
   "routes": [
     { "pattern": "saigaiban.com", "custom_domain": true },
     { "pattern": "www.saigaiban.com", "custom_domain": true }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "saigaiban",
+      "database_id": "0046f5ce-1566-4da6-91a5-406a5c9c7118",
+      "migrations_dir": "migrations"
+    }
   ]
 }

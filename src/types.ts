@@ -26,7 +26,25 @@ export type BoardPlacesPage = {
   places: BoardPlace[];
 };
 
+export type Verdict = "open" | "limited" | "closed" | "still" | "changed";
+
+export type Report = {
+  id: string;
+  place_id: string;
+  area: string;
+  seed_key: string | null;
+  verdict: Verdict;
+  note: string | null;
+  created_at: string;
+};
+
+export type PlaceSummary = {
+  latest: Report | null;
+  count: number;
+};
+
 export type Env = {
   OPENNAVI_ORIGIN: string;
   SITE_ORIGIN: string;
+  DB: D1Database;
 };

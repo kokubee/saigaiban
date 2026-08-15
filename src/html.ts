@@ -1,6 +1,7 @@
 import { categoryLabel, isShelter, prefName } from "./labels.ts";
 import { officialHubUrl, officialSupportUrl } from "./opennavi.ts";
-import type { BoardMeta, BoardPlace } from "./types.ts";
+import { VERDICT_LABEL, VERDICTS, formatWhen } from "./reports.ts";
+import type { BoardMeta, BoardPlace, PlaceSummary, Report } from "./types.ts";
 
 export function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -23,6 +24,13 @@ a{color:var(--accent)}
 .note{color:var(--muted);font-size:.92rem}
 h1{font-size:1.55rem;margin:12px 0 8px}
 h2{font-size:1.1rem;margin:28px 0 10px}
+form{margin:16px 0}
+label{display:block;margin:10px 0 4px;font-weight:700}
+select,textarea,button{font:inherit}
+select,textarea{width:100%;max-width:28rem;padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff}
+textarea{min-height:4.5rem}
+button{background:var(--accent);color:#fff8ee;border:0;border-radius:8px;padding:8px 16px;margin-top:10px}
+.flash{background:#fff3d6;border:1px solid #e0c48a;padding:10px 12px;border-radius:8px}
 .cards{display:grid;gap:10px}
 @media(min-width:720px){.cards.towns{grid-template-columns:1fr 1fr 1fr}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
@@ -79,7 +87,7 @@ export function renderHome(site: string, origin: string, meta: BoardMeta): strin
       <nav><a href="/">災害板</a><a href="/about">この板について</a><a href="${escapeHtml(officialSupportUrl(origin))}">公式の支援窓口</a></nav>
       <h1>災害板</h1>
       <p class="lead">${escapeHtml(meta.disaster.label)}について、場所ごとの「いまどうか」を書く板です。匿名の雑談スレではありません。</p>
-      <p class="note">カードは場所の名前と位置だけです。開いている保証はありません。公式の案内は <a href="${escapeHtml(origin)}">OpenNavi</a> へ。</p>
+      <p class="note">カードは場所の名前と位置です。投稿は見た時点の話で、公式ではありません。案内は <a href="${escapeHtml(origin)}">OpenNavi</a> へ。</p>
       ${towns}
       ${footer(origin, meta)}
     `,
@@ -93,6 +101,7 @@ export function renderTown(
   slug: string,
   places: BoardPlace[],
   showAll: boolean,
+  summaries: Map<string, PlaceSummary>,
 ): string {
   const area = meta.areas.find((a) => a.slug === slug);
   if (!area) return renderNotFound(site);
@@ -108,40 +117,104 @@ export function renderTown(
     .map(([cat, list]) => {
       const shown = list.slice(0, preview);
       const more = list.length - shown.length;
-      const cards = shown.map((p) => renderCard(p)).join("");
+      const cards = shown.map((p) => renderCard(slug, p, summaries.get(p.id))).join("");
       const extra =
         more > 0
-          ? `<p class="note"><a href="/a/${escapeHtml(slug)}?all=1">この種別の未確認をすべて見る（あと${more}件）</a></p>`
+          ? `<p class="note"><a href="/a/${escapeHtml(slug)}?all=1">この種別をすべて見る（あと${more}件）</a></p>`
           : "";
       return `<h2>${escapeHtml(categoryLabel(cat))}</h2><div class="cards">${cards}</div>${extra}`;
     })
     .join("");
   return page({
     title: `${area.nameJa}の災害板`,
-    description: `${area.nameJa}の場所カード。いまの営業や開設は未確認です。公式ではありません。`,
+    description: `${area.nameJa}の場所カード。投稿は見た時点の話です。公式ではありません。`,
     canonical: `${site}/a/${slug}`,
     body: `
       <nav><a href="/">災害板</a><a href="/about">この板について</a><a href="${escapeHtml(officialHubUrl(origin, slug))}">${escapeHtml(area.nameJa)}の公式ハブ</a></nav>
       <h1>${escapeHtml(area.nameJa)}の災害板</h1>
-      <p class="lead">ここに並ぶのは場所の正体です。すべてのカードは未確認です。店の営業は地図、避難所の開設は公式ハブで確認してください。</p>
+      <p class="lead">場所の正体に、「いまどうだったか」を書けます。投稿は見た時点の話で、公式ではありません。店の営業は地図、避難所の開設は公式ハブで確認してください。</p>
       ${sections || `<p class="note">この町の場所カードはまだありません。</p>`}
       ${footer(origin, meta)}
     `,
   });
 }
 
-function renderCard(place: BoardPlace): string {
+function renderCard(slug: string, place: BoardPlace, summary?: PlaceSummary): string {
+  const latest = summary?.latest;
+  const tag = latest
+    ? `<span class="tag">投稿 ${escapeHtml(VERDICT_LABEL[latest.verdict])}</span>`
+    : `<span class="tag">未確認</span>`;
+  const latestLine = latest
+    ? `<p class="note">いちばん新しい投稿: ${escapeHtml(VERDICT_LABEL[latest.verdict])}（${escapeHtml(formatWhen(latest.created_at))}・公式ではない）</p>`
+    : `<p class="note">まだ投稿はありません。</p>`;
   const shelter = isShelter(place.category)
     ? `<p class="note">指定場所の台帳です。いま開いている避難所とは限りません。</p>`
     : "";
   const maps = place.maps_url
-    ? `<p><a href="${escapeHtml(place.maps_url)}" rel="noopener">地図で見る</a></p>`
+    ? `<a href="${escapeHtml(place.maps_url)}" rel="noopener">地図で見る</a>`
     : "";
   const addr = place.address ? `<p class="note">${escapeHtml(place.address)}</p>` : "";
   return `<article class="card">
-    <h3><span class="tag">未確認</span>${escapeHtml(place.name)}</h3>
-    ${addr}${shelter}${maps}
+    <h3>${tag}${escapeHtml(place.name)}</h3>
+    ${addr}${shelter}${latestLine}
+    <p>${maps}${maps ? " ・ " : ""}<a href="/a/${escapeHtml(slug)}/p/${escapeHtml(place.id)}">いまどうかを書く</a></p>
   </article>`;
+}
+
+export function renderPlace(
+  site: string,
+  origin: string,
+  meta: BoardMeta,
+  slug: string,
+  place: BoardPlace,
+  reports: Report[],
+  notice: string | null,
+): string {
+  const area = meta.areas.find((a) => a.slug === slug);
+  const nameJa = area?.nameJa || slug;
+  const options = VERDICTS.map(
+    (v) => `<option value="${v}">${escapeHtml(VERDICT_LABEL[v])}</option>`,
+  ).join("");
+  const history =
+    reports.length === 0
+      ? `<p class="note">まだ投稿はありません。</p>`
+      : `<ul>${reports
+          .map((r) => {
+            const note = r.note ? ` — ${escapeHtml(r.note)}` : "";
+            return `<li>${escapeHtml(formatWhen(r.created_at))}　${escapeHtml(VERDICT_LABEL[r.verdict])}${note}</li>`;
+          })
+          .join("")}</ul>`;
+  const shelter = isShelter(place.category)
+    ? `<p class="note">指定場所の台帳です。開設中かどうかは公式ハブで確認してください。</p>`
+    : "";
+  const maps = place.maps_url
+    ? `<p><a href="${escapeHtml(place.maps_url)}" rel="noopener">地図で見る</a></p>`
+    : "";
+  return page({
+    title: `${place.name} — ${nameJa}の災害板`,
+    description: `${place.name}のいまどうか。投稿は見た時点の話です。公式ではありません。`,
+    canonical: `${site}/a/${slug}/p/${place.id}`,
+    body: `
+      <nav><a href="/">災害板</a><a href="/a/${escapeHtml(slug)}">${escapeHtml(nameJa)}</a><a href="${escapeHtml(officialHubUrl(origin, slug))}">公式ハブ</a></nav>
+      <h1>${escapeHtml(place.name)}</h1>
+      <p class="lead">見たときの様子だけを書いてください。氏名・電話・待ち合わせは受けません。公式発表の代わりにはなりません。</p>
+      ${shelter}${maps}
+      ${notice ? `<p class="flash">${escapeHtml(notice)}</p>` : ""}
+      <form method="post" action="/a/${escapeHtml(slug)}/p/${escapeHtml(place.id)}">
+        <label for="verdict">いまどうだったか</label>
+        <select id="verdict" name="verdict" required>
+          <option value="">選んでください</option>
+          ${options}
+        </select>
+        <label for="note">短いメモ（任意・80字まで）</label>
+        <textarea id="note" name="note" maxlength="80" placeholder="例: 15時ごろ、棚は少なかった"></textarea>
+        <button type="submit">投稿する</button>
+      </form>
+      <h2>これまでの投稿</h2>
+      ${history}
+      ${footer(origin, meta)}
+    `,
+  });
 }
 
 export function renderAbout(site: string, origin: string): string {
@@ -154,7 +227,7 @@ export function renderAbout(site: string, origin: string): string {
       <h1>この板について</h1>
       <p class="lead">災害板は、場所ごとの「いまどうか」を書くための板です。自治体や社協の公式発表の代わりにはなりません。</p>
       <h2>すること</h2>
-      <p>OpenNavi が開いた町について、店や避難所などの場所カードを自動で立てます。最初の表示はすべて未確認です。</p>
+      <p>OpenNavi が開いた町について、店や避難所などの場所カードを自動で立てます。最初は未確認です。見たときの様子を、場所に紐づけて投稿できます。</p>
       <h2>しないこと</h2>
       <ul>
         <li>公式窓口の代わりにはならない</li>

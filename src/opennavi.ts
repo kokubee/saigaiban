@@ -75,8 +75,16 @@ async function getJson(url: string): Promise<unknown> {
   const res = await fetch(url, {
     headers: { Accept: "application/json", "User-Agent": "saigaiban/0.1 (+https://saigaiban.com)" },
   });
+  if (res.status === 404) return null;
   if (!res.ok) throw new Error(`opennavi ${res.status} ${url}`);
   return res.json();
+}
+
+export async function fetchPlaceById(origin: string, id: string): Promise<BoardPlace | null> {
+  const doc = await getJson(`${opennaviOrigin(origin)}/api/board/places/${encodeURIComponent(id)}`);
+  if (!doc || typeof doc !== "object") return null;
+  const place = (doc as { place?: unknown }).place;
+  return stripPlace(place);
 }
 
 export async function fetchMeta(origin: string): Promise<BoardMeta> {
@@ -106,12 +114,12 @@ export async function fetchPlaces(
   qs.set("limit", String(Math.min(Math.max(opts.limit ?? 80, 1), 200)));
   if (opts.category) qs.set("category", opts.category);
   if (opts.cursor) qs.set("cursor", opts.cursor);
-  const doc = (await getJson(`${opennaviOrigin(origin)}/api/board/places?${qs}`)) as BoardPlacesPage;
-  const places = (doc.places || []).map(stripPlace).filter((p): p is BoardPlace => Boolean(p));
+  const doc = (await getJson(`${opennaviOrigin(origin)}/api/board/places?${qs}`)) as BoardPlacesPage | null;
+  const places = (doc?.places || []).map(stripPlace).filter((p): p is BoardPlace => Boolean(p));
   return {
-    disaster_id: String(doc.disaster_id || ""),
-    generated_at: String(doc.generated_at || ""),
-    next_cursor: doc.next_cursor || null,
+    disaster_id: String(doc?.disaster_id || ""),
+    generated_at: String(doc?.generated_at || ""),
+    next_cursor: doc?.next_cursor || null,
     places,
   };
 }

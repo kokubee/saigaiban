@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { escapeHtml } from "../src/html.ts";
 import { categoryLabel, isShelter } from "../src/labels.ts";
 import { officialHubUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
+import { cleanNote, parseVerdict } from "../src/reports.ts";
 
 test("opennavi origin never falls back to localhost", () => {
   assert.equal(opennaviOrigin(""), "https://opennavi.org");
@@ -45,4 +46,14 @@ test("labels", () => {
 
 test("escapeHtml", () => {
   assert.equal(escapeHtml(`<a href="x">`), "&lt;a href=&quot;x&quot;&gt;");
+});
+
+test("verdict and note rules reject matching and contacts", () => {
+  assert.equal(parseVerdict("open"), "open");
+  assert.equal(parseVerdict("営業中"), null);
+  assert.equal(cleanNote("15時ごろ棚が少なかった").note, "15時ごろ棚が少なかった");
+  assert.match(cleanNote("https://example.com").error || "", /URL/);
+  assert.match(cleanNote("09012345678").error || "", /電話/);
+  assert.match(cleanNote("LINE IDはabc").error || "", /連絡先/);
+  assert.match(cleanNote("駅前で待ち合わせ").error || "", /仲介/);
 });
