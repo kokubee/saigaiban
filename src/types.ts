@@ -89,5 +89,7 @@ export type Env = {
   PUBLIC_TURNSTILE_SITE_KEY?: string;
   /** Cloudflare Turnstile secret; configure as a Wrangler secret, never a public var. */
   TURNSTILE_SECRET_KEY?: string;
+  /** HMAC secret for the short-lived rate-limit token; configure as a Wrangler secret. */
+  RATE_LIMIT_HMAC_SECRET?: string;
   DB: D1Database;
 };

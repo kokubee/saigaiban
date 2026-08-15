@@ -8,6 +8,7 @@ import { googleMapsSearchUrl } from "../src/maps.ts";
 import { officialHubUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
 import { cleanNote, parseVerdict, resolvePost } from "../src/reports.ts";
 import { publicPostingEnabled, publicPostingMode } from "../src/posting.ts";
+import { purgeExpiredIpHashes, rateLimitConfigured, shortIpHmac } from "../src/rate-limit.ts";
 import { sanitizeTelemetry, telemetryAllowlist } from "../src/telemetry.ts";
 import { turnstileConfigured, verifyTurnstile } from "../src/turnstile.ts";
 import worker from "../src/index.ts";
@@ -84,6 +85,28 @@ test("Turnstile must be configured and verified before intake can open", async (
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("rate-limit identity is a rotating HMAC and short secret is required", async () => {
+  assert.equal(rateLimitConfigured("short"), false);
+  assert.equal(rateLimitConfigured("12345678901234567890123456789012"), true);
+  assert.equal(await shortIpHmac("192.0.2.1"), null);
+  const secret = "12345678901234567890123456789012";
+  const today = await shortIpHmac("192.0.2.1", secret, Date.parse("2026-08-16T12:00:00Z"));
+  const tomorrow = await shortIpHmac("192.0.2.1", secret, Date.parse("2026-08-17T12:00:00Z"));
+  assert.ok(today);
+  assert.ok(tomorrow);
+  assert.notEqual(today, tomorrow);
+  let purgeSql = "";
+  const db = {
+    prepare(sql: string) {
+      purgeSql = sql;
+      return { run: async () => ({ success: true }) };
+    },
+  };
+  await purgeExpiredIpHashes(db as never);
+  assert.match(purgeSql, /SET ip_hash = NULL/);
+  assert.match(purgeSql, /24 hours/);
 });
 
 test("place page hides the report form while public posting is closed", () => {

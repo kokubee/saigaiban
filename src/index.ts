@@ -11,7 +11,6 @@ import { fetchMeta, fetchPlaceById, fetchPlaces, officialSupportUrl, opennaviOri
 import {
   allowedOrigin,
   cleanNote,
-  hashIp,
   insertReport,
   latestByPlaces,
   listReports,
@@ -19,6 +18,7 @@ import {
 } from "./reports.ts";
 import { isShopLike } from "./labels.ts";
 import { publicPostingEnabled } from "./posting.ts";
+import { purgeExpiredIpHashes, rateLimitConfigured, shortIpHmac } from "./rate-limit.ts";
 import { turnstileConfigured, verifyTurnstile } from "./turnstile.ts";
 import type { BoardPlace, Env } from "./types.ts";
 
@@ -30,7 +30,7 @@ export default {
     const measurementId = String(env.GA4_MEASUREMENT_ID || "").trim();
     const turnstileSiteKey = String(env.PUBLIC_TURNSTILE_SITE_KEY || "").trim();
     const turnstileReady = turnstileConfigured(env.TURNSTILE_SECRET_KEY, turnstileSiteKey);
-    const postingEnabled = publicPostingEnabled(env.PUBLIC_POSTING_MODE) && turnstileReady;
+    const postingEnabled = publicPostingEnabled(env.PUBLIC_POSTING_MODE) && turnstileReady && rateLimitConfigured(env.RATE_LIMIT_HMAC_SECRET);
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
     try {
@@ -96,6 +96,9 @@ export default {
       );
     }
   },
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(purgeExpiredIpHashes(env.DB));
+  },
 };
 
 async function handlePost(
@@ -136,7 +139,7 @@ async function handlePost(
     seedKey: place.seed_key,
     verdict: decided.verdict,
     note: cleaned.note,
-    ipHash: await hashIp(ip),
+    ipHash: (await shortIpHmac(ip, env.RATE_LIMIT_HMAC_SECRET)) || "",
     role: decided.role,
     preferMaps: decided.preferMaps,
   });
