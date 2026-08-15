@@ -89,6 +89,8 @@ export type Env = {
   PUBLIC_READ_CACHE?: string;
   /** Public report intake: off (default) or on after P0 safety checks. */
   PUBLIC_POSTING_MODE?: string;
+  /** Comma-separated area slugs that may accept reports when posting mode is on. */
+  PUBLIC_POSTING_AREAS?: string;
   /** Cloudflare Turnstile site key (public); paired with the secret key. */
   PUBLIC_TURNSTILE_SITE_KEY?: string;
   /** Comma-separated production hostnames accepted in Turnstile responses. */

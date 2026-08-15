@@ -7,7 +7,7 @@ import { categoryDescription, categoryLabel, isShelter, normalizePlaceCategory }
 import { googleMapsSearchUrl } from "../src/maps.ts";
 import { officialHubUrl, officialVictimUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
 import { cleanNote, flagReport, moderateReport, parseFlagReason, parseModerationAction, parseVerdict, resolvePost } from "../src/reports.ts";
-import { publicPostingEnabled, publicPostingMode } from "../src/posting.ts";
+import { publicPostingAreas, publicPostingEnabled, publicPostingEnabledForArea, publicPostingMode } from "../src/posting.ts";
 import { purgeExpiredIpHashes, rateLimitConfigured, shortIpHmac } from "../src/rate-limit.ts";
 import { reportRequestHeadersAllowed } from "../src/request.ts";
 import { sanitizeTelemetry, telemetryAllowlist } from "../src/telemetry.ts";
@@ -123,6 +123,17 @@ test("public posting is closed unless explicitly enabled", () => {
   assert.equal(publicPostingMode("unexpected"), "off");
   assert.equal(publicPostingEnabled(undefined), false);
   assert.equal(publicPostingEnabled("on"), true);
+});
+
+test("public posting requires an explicit valid area allowlist", () => {
+  const areas = publicPostingAreas(" mobara, OAMISHIRASATO, bad/slug, --, mobara ");
+  assert.deepEqual([...areas], ["mobara", "oamishirasato"]);
+  assert.equal(publicPostingEnabledForArea("on", "mobara", areas), true);
+  assert.equal(publicPostingEnabledForArea("on", "oamishirasato", areas), true);
+  assert.equal(publicPostingEnabledForArea("on", "chiba", areas), false);
+  assert.equal(publicPostingEnabledForArea("off", "mobara", areas), false);
+  assert.equal(publicPostingEnabledForArea("on", "bad/slug", areas), false);
+  assert.equal(publicPostingEnabledForArea("on", "mobara", new Set()), false);
 });
 
 test("Turnstile must be configured and verified before intake can open", async () => {
@@ -358,6 +369,45 @@ test("POST rejects before OpenNavi or D1 access while public posting is closed",
         OPENNAVI_ORIGIN: "https://opennavi.org",
         SITE_ORIGIN: "https://saigaiban.com",
         PUBLIC_POSTING_MODE: "off",
+        DB: db,
+      } as unknown as Env,
+    );
+    assert.equal(response.status, 303);
+    assert.equal(externalFetches, 0);
+    assert.equal(d1Accesses, 0);
+    const location = new URL(response.headers.get("location") || "https://saigaiban.com/");
+    assert.equal(location.searchParams.get("err"), "現在は投稿受付を停止しています。公式ハブで確認してください。");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("POST rejects an area outside the explicit posting allowlist", async () => {
+  const originalFetch = globalThis.fetch;
+  let externalFetches = 0;
+  let d1Accesses = 0;
+  globalThis.fetch = async () => {
+    externalFetches += 1;
+    throw new Error("unexpected external fetch");
+  };
+  const db = new Proxy({}, {
+    get() {
+      d1Accesses += 1;
+      throw new Error("unexpected D1 access");
+    },
+  });
+  try {
+    const response = await worker.fetch(
+      new Request("https://saigaiban.com/a/mobara/p/12345678", { method: "POST" }),
+      {
+        OPENNAVI_ORIGIN: "https://opennavi.org",
+        SITE_ORIGIN: "https://saigaiban.com",
+        PUBLIC_POSTING_MODE: "on",
+        PUBLIC_POSTING_AREAS: "oamishirasato",
+        PUBLIC_TURNSTILE_SITE_KEY: "site-key-123456",
+        PUBLIC_TURNSTILE_HOSTNAMES: "saigaiban.com",
+        TURNSTILE_SECRET_KEY: "secret",
+        RATE_LIMIT_HMAC_SECRET: "12345678901234567890123456789012",
         DB: db,
       } as unknown as Env,
     );

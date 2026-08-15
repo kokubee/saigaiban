@@ -21,7 +21,7 @@ import {
   resolvePost,
 } from "./reports.ts";
 import { isKnownCategory, isShopLike } from "./labels.ts";
-import { publicPostingEnabled } from "./posting.ts";
+import { publicPostingAreas, publicPostingEnabledForArea } from "./posting.ts";
 import { purgeExpiredIpHashes, rateLimitConfigured, shortIpHmac } from "./rate-limit.ts";
 import { adminRequestHeadersAllowed, reportRequestHeadersAllowed } from "./request.ts";
 import { turnstileConfigured, turnstileHostnames, verifyTurnstile } from "./turnstile.ts";
@@ -36,7 +36,10 @@ export default {
     const turnstileSiteKey = String(env.PUBLIC_TURNSTILE_SITE_KEY || "").trim();
     const turnstileAllowedHostnames = turnstileHostnames(env.PUBLIC_TURNSTILE_HOSTNAMES);
     const turnstileReady = turnstileConfigured(env.TURNSTILE_SECRET_KEY, turnstileSiteKey, turnstileAllowedHostnames);
-    const postingEnabled = publicPostingEnabled(env.PUBLIC_POSTING_MODE) && turnstileReady && rateLimitConfigured(env.RATE_LIMIT_HMAC_SECRET);
+    const postingAreas = publicPostingAreas(env.PUBLIC_POSTING_AREAS);
+    const postingSecurityReady = turnstileReady && rateLimitConfigured(env.RATE_LIMIT_HMAC_SECRET);
+    const postingEnabledForArea = (areaSlug: string): boolean =>
+      postingSecurityReady && publicPostingEnabledForArea(env.PUBLIC_POSTING_MODE, areaSlug, postingAreas);
     const reportingEnabled = rateLimitConfigured(env.RATE_LIMIT_HMAC_SECRET);
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
@@ -61,7 +64,7 @@ export default {
       }
 
       const earlyPlacePath = path.match(/^\/a\/([a-z0-9-]+)\/p\/([0-9a-f-]{8,})$/i);
-      if (earlyPlacePath && request.method === "POST" && !postingEnabled) {
+      if (earlyPlacePath && request.method === "POST" && !postingEnabledForArea(earlyPlacePath[1])) {
         return redirect(site, `/a/${earlyPlacePath[1]}/p/${earlyPlacePath[2]}`, "現在は投稿受付を停止しています。公式ハブで確認してください。");
       }
 
@@ -86,7 +89,7 @@ export default {
         if (!place || place.area !== slug) return html(renderNotFound(site, measurementId), 404);
 
         if (request.method === "POST") {
-          return handlePost(request, env, site, slug, place, postingEnabled, env.TURNSTILE_SECRET_KEY, turnstileAllowedHostnames);
+          return handlePost(request, env, site, slug, place, postingEnabledForArea(slug), env.TURNSTILE_SECRET_KEY, turnstileAllowedHostnames);
         }
         const notice = url.searchParams.get("ok") === "1"
           ? "受け取りました。公式ではありません。地図と公式ハブも見てください。"
@@ -94,7 +97,7 @@ export default {
             ? "通報を受け付けました。内容を確認します。"
             : url.searchParams.get("err");
         const reports = await listReports(env.DB, place.id);
-        return html(renderPlace(site, origin, meta, slug, place, reports, notice, measurementId, postingEnabled, turnstileSiteKey, reportingEnabled), 200, "private, no-store");
+        return html(renderPlace(site, origin, meta, slug, place, reports, notice, measurementId, postingEnabledForArea(slug), turnstileSiteKey, reportingEnabled), 200, "private, no-store");
       }
 
       const town = path.match(/^\/a\/([a-z0-9-]+)$/);
@@ -110,7 +113,7 @@ export default {
           ...(selectedCategory ? { category: selectedCategory } : {}),
         }, env.PUBLIC_READ_CACHE);
         const summaries = await latestByPlaces(env.DB, page.places.map((p) => p.id));
-        return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries, measurementId, postingEnabled, selectedCategory, searchQuery));
+        return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries, measurementId, postingEnabledForArea(slug), selectedCategory, searchQuery));
       }
 
       return html(renderNotFound(site, measurementId), 404);

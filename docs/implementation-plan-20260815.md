@@ -3,7 +3,7 @@
 作成日: 2026-08-15／レビュー反映: 2026-08-16
 対象リポジトリ: `/Users/kokubee/code2026/saigaiban`  
 基準コミット: `382b1b7 feat: separate disaster board support navigation`  
-状態: 条件付き承認。P-1（現行実装との差分固定）は `docs/implementation-baseline-20260816.md` に記録済み。P0は証拠・鮮度projection、値検証付きテレメトリallowlist、既定OFFの投稿受付ゲート、読み取り専用表示、外部取得前のPOST拒否、fail-closedなTurnstileサーバー検証、短期HMACと識別子保持期限処理、shadowキャッシュ契約、通報・非表示・管理者確認経路まで実装済み。今回の追補で、公開状態／レビュー状態の独立更新、報告更新＋監査のD1 batch原子性、通報UIのHMAC準備ゲート、本文読み取りを含む外部取得timeout、SQLite日時比較、通報303復帰を実装した。`0003` migrationの先行適用・実D1確認を完了し、`PUBLIC_POSTING_MODE=off` の読み取り専用Workerをデプロイ済み。投稿ONはwrite ownershipの承認、Turnstile/HMAC秘密の本番設定、実DBでのcron・moderation監査確認まで引き続きHOLDとする。
+状態: 条件付き承認。P-1（現行実装との差分固定）は `docs/implementation-baseline-20260816.md` に記録済み。P0は証拠・鮮度projection、値検証付きテレメトリallowlist、既定OFFの投稿受付ゲート、読み取り専用表示、外部取得前のPOST拒否、fail-closedなTurnstileサーバー検証、短期HMACと識別子保持期限処理、shadowキャッシュ契約、通報・非表示・管理者確認経路まで実装済み。今回の追補で、公開状態／レビュー状態の独立更新、報告更新＋監査のD1 batch原子性、通報UIのHMAC準備ゲート、本文読み取りを含む外部取得timeout、SQLite日時比較、通報303復帰、地域単位の投稿許可リストを実装した。`0003` migrationの先行適用・実D1確認を完了し、`PUBLIC_POSTING_MODE=off` の読み取り専用Workerをデプロイ済み。投稿ONはwrite ownershipの承認、Turnstile/HMAC秘密の本番設定、実DBでのcron・moderation監査確認まで引き続きHOLDとする。
 
 ## 1. 災害板の役割
 
@@ -151,7 +151,7 @@ freshness: "fresh" | "stale" | "expired" | "unknown"
 
 - Origin確認、短時間クールダウン、Turnstile等のbot対策を投稿再開の必須条件にする。Turnstileは実装済みだが、secret/site key設定と実検証確認が済むまで受付を開けない
 - IP由来の固定SHA-256を監査識別子として長期保存しない。クールダウン用は秘密鍵付きHMAC＋期間salt等の短期トークンにし、目的を終えたら削除する
-- 投稿停止、確認のみ、通常受付を環境・地域単位で切替可能にする
+- 投稿停止、確認のみ、通常受付を環境・地域単位で切替可能にする。通常受付は `PUBLIC_POSTING_MODE=on` と `PUBLIC_POSTING_AREAS=<slug,...>` の両方が必要
 - 通報・非表示・管理者確認の経路を追加する
 - 同じ内容の連続投稿をまとめ、最新1件だけをカード要約に出す
 - 住所、電話、SNS ID、個人名、待ち合わせ、救助依頼を保存しない
@@ -217,6 +217,7 @@ lifeline_reports
 - telemetryは現在sanitize helperとテストまでで、カスタムイベント送信経路は未配線。配線時もsanitizeTelemetryを必須にする
 - `time_to_first_action_ms` を利用者識別なしで計測可能にする
 - 公開投稿は `PUBLIC_POSTING_MODE=off` を既定値とし、off時はフォームを出さずPOSTも受け付けない
+- 投稿を再開する場合も `PUBLIC_POSTING_AREAS` に列挙した実在の地域slugだけを対象とし、空欄・不正値・未設定は全地域を閉じる。千葉は当面空欄のまま読み取り専用とする
 - telemetryの地域slug（実在area集合との照合）・既知カテゴリ・need・kind・verdict・経過時間を値レベルで検証し、自由文を破棄する
 - 鮮度は24時間以内=`fresh`、24〜72時間=`stale`、72時間超=`expired`、未来・不正時刻=`unknown` とする
 - 店側自己申告カードにもauthority・review・freshnessのラベルを表示する

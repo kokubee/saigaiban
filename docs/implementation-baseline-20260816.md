@@ -30,6 +30,7 @@ P0以降の開始条件は、次の3点である。
 - `saigaiban` は将来の `place_reports`（場所カードに紐づく現地観測）の正本候補とする。
 - OpenNaviの `/lifelines` は地域全体の停電・断水報告として別契約のlegacy経路に残し、災害板へ自動複製しない。
 - 本コミットではOpenNavi側を変更せず、二重書込を避けるため災害板の公開投稿は `PUBLIC_POSTING_MODE=off` に固定する。
+- 次回災害で再開する場合も、`PUBLIC_POSTING_MODE=on` だけでは開かず、`PUBLIC_POSTING_AREAS` に実在する地域slugを列挙した地域だけを対象にする。千葉は投稿を再開せず、現行の空欄・OFF設定を維持する。
 - `saigaiban` の投稿を再開するか、OpenNavi `/lifelines` をread-only／管理者専用へ移行するかは、OpenNaviリポジトリ側の別承認で確定する。
 
 ## 2. 現行データフロー
