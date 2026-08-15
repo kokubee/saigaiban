@@ -20,7 +20,7 @@ import {
   parseModerationAction,
   resolvePost,
 } from "./reports.ts";
-import { isShopLike } from "./labels.ts";
+import { isKnownCategory, isShopLike } from "./labels.ts";
 import { publicPostingEnabled } from "./posting.ts";
 import { purgeExpiredIpHashes, rateLimitConfigured, shortIpHmac } from "./rate-limit.ts";
 import { adminRequestHeadersAllowed, reportRequestHeadersAllowed } from "./request.ts";
@@ -102,9 +102,15 @@ export default {
         const slug = town[1];
         if (!meta.areas.some((a) => a.slug === slug)) return html(renderNotFound(site, measurementId), 404);
         const showAll = url.searchParams.get("all") === "1";
-        const page = await fetchPlaces(origin, slug, { limit: showAll ? 200 : 80 }, env.PUBLIC_READ_CACHE);
+        const requestedCategory = String(url.searchParams.get("category") || "").trim();
+        const selectedCategory = isKnownCategory(requestedCategory) ? requestedCategory : "";
+        const searchQuery = String(url.searchParams.get("q") || "").trim().slice(0, 40);
+        const page = await fetchPlaces(origin, slug, {
+          limit: showAll || selectedCategory || searchQuery ? 200 : 80,
+          ...(selectedCategory ? { category: selectedCategory } : {}),
+        }, env.PUBLIC_READ_CACHE);
         const summaries = await latestByPlaces(env.DB, page.places.map((p) => p.id));
-        return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries, measurementId, postingEnabled));
+        return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries, measurementId, postingEnabled, selectedCategory, searchQuery));
       }
 
       return html(renderNotFound(site, measurementId), 404);

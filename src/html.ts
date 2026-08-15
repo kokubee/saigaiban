@@ -1,4 +1,4 @@
-import { categoryLabel, isShelter, isShopLike, prefName } from "./labels.ts";
+import { CATEGORY_FILTERS, categoryLabel, isShelter, isShopLike, isKnownCategory, prefName } from "./labels.ts";
 import { googleMapsSearchUrl } from "./maps.ts";
 import { officialHubUrl, officialSupportUrl } from "./opennavi.ts";
 import { evidenceLabel } from "./evidence.ts";
@@ -48,6 +48,16 @@ nav a{margin-right:12px}
 .area-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 10px}
 .area-tab{display:inline-block;background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:6px 12px;text-decoration:none;margin:0}
 .area-tab[aria-current="page"]{background:var(--accent);border-color:var(--accent);color:#fff8ee}
+.town-tools{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px;margin:18px 0}
+.town-tools h2{margin:0 0 8px;font-size:1rem}
+.category-filters{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 14px}
+.category-filter{display:inline-block;border:1px solid var(--line);border-radius:999px;background:#fff;padding:6px 11px;text-decoration:none}
+.category-filter[aria-current="page"]{background:var(--accent);border-color:var(--accent);color:#fff8ee}
+.search-form{display:flex;gap:8px;max-width:36rem}
+.search-form input{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.search-form button{margin:0;white-space:nowrap}
+.result-count{margin:10px 0 0;color:var(--muted);font-size:.9rem}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .support-grid{display:grid;gap:12px}
 @media(min-width:720px){.support-grid{grid-template-columns:1fr 1fr}}
 .support-card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px}
@@ -165,16 +175,36 @@ export function renderTown(
   summaries: Map<string, PlaceSummary>,
   measurementId?: string | null,
   allowPosting = false,
+  selectedCategory?: string,
+  searchQuery?: string,
 ): string {
   const area = meta.areas.find((a) => a.slug === slug);
   if (!area) return renderNotFound(site, measurementId);
+  const category = selectedCategory && isKnownCategory(selectedCategory) ? selectedCategory : "";
+  const query = String(searchQuery || "").trim().slice(0, 40);
+  const normalizedQuery = query.toLocaleLowerCase("ja-JP");
+  const filteredPlaces = normalizedQuery
+    ? places.filter((place) => [place.name, place.address || "", categoryLabel(place.category)].join(" ").toLocaleLowerCase("ja-JP").includes(normalizedQuery))
+    : places;
   const byCat = new Map<string, BoardPlace[]>();
-  for (const place of places) {
+  for (const place of filteredPlaces) {
     const list = byCat.get(place.category) || [];
     list.push(place);
     byCat.set(place.category, list);
   }
-  const preview = showAll ? Infinity : 6;
+  const preview = showAll || Boolean(category || query) ? Infinity : 6;
+  const queryString = (nextCategory = category) => {
+    const params = new URLSearchParams();
+    if (nextCategory) params.set("category", nextCategory);
+    if (query) params.set("q", query);
+    return params.toString();
+  };
+  const primaryFilterIds = new Set(["conv", "gas", "food", "hinanjo"]);
+  const filterCategories = CATEGORY_FILTERS.filter(({ id }) => isKnownCategory(id) && (primaryFilterIds.has(id) || id === category || places.some((place) => place.category === id))).filter(({ label }, index, all) => all.findIndex((item) => item.label === label) === index);
+  const filterLinks = [`<a class="category-filter" href="/a/${escapeHtml(slug)}${queryString() ? `?${escapeHtml(queryString(""))}` : ""}"${category ? "" : " aria-current=\"page\""}>すべて</a>`, ...filterCategories.map(({ id, label }) => {
+    const qs = queryString(id);
+    return `<a class="category-filter" href="/a/${escapeHtml(slug)}?${escapeHtml(qs)}"${category === id ? " aria-current=\"page\"" : ""}>${escapeHtml(label)}</a>`;
+  })].join("");
   const sections = [...byCat.entries()]
     .sort((a, b) => categoryLabel(a[0]).localeCompare(categoryLabel(b[0]), "ja"))
     .map(([cat, list]) => {
@@ -183,11 +213,22 @@ export function renderTown(
       const cards = shown.map((p) => renderCard(slug, area.nameJa, p, summaries.get(p.id), allowPosting)).join("");
       const extra =
         more > 0
-          ? `<p class="note"><a href="/a/${escapeHtml(slug)}?all=1">この種別をすべて見る（あと${more}件）</a></p>`
+          ? `<p class="note"><a href="/a/${escapeHtml(slug)}?${escapeHtml(queryString(cat))}&all=1">この種別をすべて見る（あと${more}件）</a></p>`
           : "";
       return `<h2>${escapeHtml(categoryLabel(cat))}</h2><div class="cards">${cards}</div>${extra}`;
     })
     .join("");
+  const tools = `<section class="town-tools" aria-labelledby="town-tools-title">
+    <h2 id="town-tools-title">まず探す場所を絞る</h2>
+    <nav class="category-filters" aria-label="場所のカテゴリ">${filterLinks}</nav>
+    <form class="search-form" method="get" action="/a/${escapeHtml(slug)}">
+      ${category ? `<input type="hidden" name="category" value="${escapeHtml(category)}">` : ""}
+      <label class="sr-only" for="town-search">場所を検索</label>
+      <input id="town-search" name="q" type="search" maxlength="40" value="${escapeHtml(query)}" placeholder="店名・施設名・住所で検索">
+      <button type="submit">検索</button>
+    </form>
+    <p class="result-count">${filteredPlaces.length}件表示${category ? `・${escapeHtml(categoryLabel(category))}` : ""}${query ? `・「${escapeHtml(query)}」` : ""}</p>
+  </section>`;
   return page({
     title: `${area.nameJa}の災害板`,
     description: `${area.nameJa}の場所カード。投稿は見た時点の話です。公式ではありません。`,
@@ -197,7 +238,8 @@ export function renderTown(
       <nav><a href="/">災害板</a><a href="/about">この板について</a><a href="${escapeHtml(officialHubUrl(origin, slug))}">${escapeHtml(area.nameJa)}の公式ハブ</a></nav>
       <h1>${escapeHtml(area.nameJa)}の災害板</h1>
       <p class="lead">${allowPosting ? "場所の正体に、「いまどうだったか」を書けます。" : "場所ごとのこれまでの報告を確認できます。"} 投稿は見た時点の話で、公式ではありません。店の営業は地図、避難所の開設は公式ハブで確認してください。</p>
-      ${sections || `<p class="note">この町の場所カードはまだありません。</p>`}
+      ${tools}
+      ${sections || `<p class="note">条件に合う場所がありません。カテゴリを戻すか、検索語を短くしてみてください。</p>`}
       ${footer(origin, meta)}
     `,
   });

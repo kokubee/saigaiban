@@ -63,12 +63,31 @@ const CATEGORY_LABELS: Record<string, string> = {
   meal: "食事",
 };
 
+export const CATEGORY_FILTERS: Array<{ id: string; label: string }> = [
+  { id: "conv", label: "コンビニ" },
+  { id: "gas", label: "給油" },
+  { id: "food", label: "食事" },
+  { id: "meal", label: "食事" },
+  { id: "hinanjo", label: "避難所" },
+  { id: "water_spot", label: "給水" },
+  { id: "toilet", label: "トイレ" },
+  { id: "bath", label: "入浴" },
+  { id: "laundry", label: "洗濯" },
+  { id: "super", label: "スーパー" },
+  { id: "shop", label: "店" },
+  { id: "water", label: "水" },
+];
+
 export function prefName(code: string): string {
   return PREF_NAMES[code] || (code ? `都道府県(${code})` : "その他");
 }
 
 export function categoryLabel(id: string): string {
   return CATEGORY_LABELS[id] || id;
+}
+
+export function isKnownCategory(id: string): boolean {
+  return Object.prototype.hasOwnProperty.call(CATEGORY_LABELS, id);
 }
 
 export function isShelter(category: string): boolean {

@@ -226,6 +226,12 @@ test("place page hides the report form while public posting is closed", () => {
   const townHtml = renderTown("https://saigaiban.com", "https://opennavi.org", meta, "mobara", [place], false, new Map(), null, false);
   assert.doesNotMatch(townHtml, /いまどうかを書く/);
   assert.match(townHtml, /これまでの報告を見る/);
+  assert.match(townHtml, /場所を絞る/);
+  assert.match(townHtml, /コンビニ/);
+  assert.match(townHtml, /name="q"/);
+  const filtered = renderTown("https://saigaiban.com", "https://opennavi.org", meta, "mobara", [place], false, new Map(), null, false, "conv", "テスト");
+  assert.match(filtered, /value="テスト"/);
+  assert.match(filtered, /category=conv/);
 });
 
 test("reporting UI is hidden until the independent HMAC gate is ready", () => {
