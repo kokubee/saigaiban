@@ -232,6 +232,14 @@ test("place page hides the report form while public posting is closed", () => {
   const filtered = renderTown("https://saigaiban.com", "https://opennavi.org", meta, "mobara", [place], false, new Map(), null, false, "conv", "テスト");
   assert.match(filtered, /value="テスト"/);
   assert.match(filtered, /category=conv/);
+  const mixed = [
+    place,
+    { ...place, id: "hospital-1", name: "おおあみ泌尿器科", category: "hospital" },
+    { ...place, id: "laundry-1", name: "鈴木クリーニング", category: "laundry" },
+  ];
+  const hospitalOnly = renderTown("https://saigaiban.com", "https://opennavi.org", meta, "mobara", mixed, false, new Map(), null, false, "hospital");
+  assert.match(hospitalOnly, /おおあみ泌尿器科/);
+  assert.doesNotMatch(hospitalOnly, /鈴木クリーニング/);
 });
 
 test("reporting UI is hidden until the independent HMAC gate is ready", () => {

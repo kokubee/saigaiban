@@ -185,9 +185,10 @@ export function renderTown(
   const category = selectedCategory && isKnownCategory(selectedCategory) ? selectedCategory : "";
   const query = String(searchQuery || "").trim().slice(0, 40);
   const normalizedQuery = query.toLocaleLowerCase("ja-JP");
+  const categoryPlaces = category ? places.filter((place) => place.category === category) : places;
   const filteredPlaces = normalizedQuery
-    ? places.filter((place) => [place.name, place.address || "", categoryLabel(place.category)].join(" ").toLocaleLowerCase("ja-JP").includes(normalizedQuery))
-    : places;
+    ? categoryPlaces.filter((place) => [place.name, place.address || "", categoryLabel(place.category)].join(" ").toLocaleLowerCase("ja-JP").includes(normalizedQuery))
+    : categoryPlaces;
   const byCat = new Map<string, BoardPlace[]>();
   for (const place of filteredPlaces) {
     const list = byCat.get(place.category) || [];
