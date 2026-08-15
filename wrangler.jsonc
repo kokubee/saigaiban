@@ -8,7 +8,8 @@
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "vars": {
     "OPENNAVI_ORIGIN": "https://opennavi.org",
-    "SITE_ORIGIN": "https://saigaiban.com"
+    "SITE_ORIGIN": "https://saigaiban.com",
+    "GA4_MEASUREMENT_ID": "G-4KQPS1LRHV"
   },
   "routes": [
     { "pattern": "saigaiban.com", "custom_domain": true },

@@ -26,6 +26,8 @@ npm run dev
 
 本番は Cloudflare Worker です。`OPENNAVI_ORIGIN` の初期値は `https://opennavi.org` です。localhost には倒れません。
 
+計測は `GA4_MEASUREMENT_ID`（本番は `G-4KQPS1LRHV`）を HTML の head に載せます。未設定や不正な値のときはスクリプトを出しません。投稿本文・氏名・電話は送りません。
+
 ## 投稿
 
 見かけた人も、店の人も書けます。店側は「営業は Google マップを見てほしい」と自己申告できます。地図リンクは台帳にある検索URLだけを使い、Maps API キーは使いません。氏名・電話・待ち合わせは受けません。

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { escapeHtml } from "../src/html.ts";
+import { escapeHtml, gaSnippet, renderHome } from "../src/html.ts";
 import { categoryLabel, isShelter } from "../src/labels.ts";
 import { officialHubUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
 import { cleanNote, parseVerdict, resolvePost } from "../src/reports.ts";
@@ -46,6 +46,33 @@ test("labels", () => {
 
 test("escapeHtml", () => {
   assert.equal(escapeHtml(`<a href="x">`), "&lt;a href=&quot;x&quot;&gt;");
+});
+
+test("gaSnippet emits gtag only for a valid measurement id", () => {
+  assert.equal(gaSnippet(""), "");
+  assert.equal(gaSnippet("UA-123"), "");
+  assert.equal(gaSnippet("G-4KQPS1LRHV\"><script>"), "");
+  const html = gaSnippet("G-4KQPS1LRHV");
+  assert.match(html, /googletagmanager\.com\/gtag\/js\?id=G-4KQPS1LRHV/);
+  assert.match(html, /gtag\('config', 'G-4KQPS1LRHV'\)/);
+});
+
+test("home page head includes GA4 when configured", () => {
+  const html = renderHome(
+    "https://saigaiban.com",
+    "https://opennavi.org",
+    {
+      disaster: { id: "r8-chiba-heavy-rain", label: "令和8年千葉県豪雨" },
+      areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" }],
+    },
+    "G-4KQPS1LRHV",
+  );
+  assert.match(html, /id=G-4KQPS1LRHV/);
+  assert.match(html, /gtag\('config', 'G-4KQPS1LRHV'\)/);
+  assert.equal(renderHome("https://saigaiban.com", "https://opennavi.org", {
+    disaster: { id: "r8-chiba-heavy-rain", label: "令和8年千葉県豪雨" },
+    areas: [],
+  }).includes("googletagmanager"), false);
 });
 
 test("verdict and note rules reject matching and contacts", () => {

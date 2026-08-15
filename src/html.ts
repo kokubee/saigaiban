@@ -43,7 +43,29 @@ nav a{margin-right:12px}
 .foot{margin-top:36px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:.85rem}
 `;
 
-function page(opts: { title: string; description: string; canonical: string; body: string }): string {
+/** GA4。測定IDが無い／不正なら何も出さない。個人情報は送らない。 */
+export function gaSnippet(measurementId: string | null | undefined): string {
+  const id = String(measurementId || "").trim();
+  if (!/^G-[A-Z0-9]+$/i.test(id)) return "";
+  const safe = escapeHtml(id);
+  return `<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=${safe}"></script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', '${safe}');
+</script>
+`;
+}
+
+function page(opts: {
+  title: string;
+  description: string;
+  canonical: string;
+  body: string;
+  measurementId?: string | null;
+}): string {
   return `<!doctype html>
 <html lang="ja">
 <head>
@@ -53,7 +75,7 @@ function page(opts: { title: string; description: string; canonical: string; bod
 <meta name="description" content="${escapeHtml(opts.description)}">
 <link rel="canonical" href="${escapeHtml(opts.canonical)}">
 <style>${CSS}</style>
-</head>
+${gaSnippet(opts.measurementId)}</head>
 <body>
 <div class="banner">ここは公式の窓口ではありません。場所の営業や開設は、地図と公式ハブで確認してください。</div>
 <div class="wrap">${opts.body}</div>
@@ -61,7 +83,12 @@ function page(opts: { title: string; description: string; canonical: string; bod
 </html>`;
 }
 
-export function renderHome(site: string, origin: string, meta: BoardMeta): string {
+export function renderHome(
+  site: string,
+  origin: string,
+  meta: BoardMeta,
+  measurementId?: string | null,
+): string {
   const byPref = new Map<string, typeof meta.areas>();
   for (const area of meta.areas) {
     const key = area.prefCode || "00";
@@ -85,6 +112,7 @@ export function renderHome(site: string, origin: string, meta: BoardMeta): strin
     title: "災害板 — 場所ごとのいまどうか",
     description: `${meta.disaster.label}の町ごとに、場所のカードを未確認から立てています。公式ではありません。`,
     canonical: `${site}/`,
+    measurementId,
     body: `
       <nav><a href="/">災害板</a><a href="/about">この板について</a><a href="${escapeHtml(officialSupportUrl(origin))}">公式の支援窓口</a></nav>
       <h1>災害板</h1>
@@ -104,9 +132,10 @@ export function renderTown(
   places: BoardPlace[],
   showAll: boolean,
   summaries: Map<string, PlaceSummary>,
+  measurementId?: string | null,
 ): string {
   const area = meta.areas.find((a) => a.slug === slug);
-  if (!area) return renderNotFound(site);
+  if (!area) return renderNotFound(site, measurementId);
   const byCat = new Map<string, BoardPlace[]>();
   for (const place of places) {
     const list = byCat.get(place.category) || [];
@@ -131,6 +160,7 @@ export function renderTown(
     title: `${area.nameJa}の災害板`,
     description: `${area.nameJa}の場所カード。投稿は見た時点の話です。公式ではありません。`,
     canonical: `${site}/a/${slug}`,
+    measurementId,
     body: `
       <nav><a href="/">災害板</a><a href="/about">この板について</a><a href="${escapeHtml(officialHubUrl(origin, slug))}">${escapeHtml(area.nameJa)}の公式ハブ</a></nav>
       <h1>${escapeHtml(area.nameJa)}の災害板</h1>
@@ -184,6 +214,7 @@ export function renderPlace(
   place: BoardPlace,
   reports: Report[],
   notice: string | null,
+  measurementId?: string | null,
 ): string {
   const area = meta.areas.find((a) => a.slug === slug);
   const nameJa = area?.nameJa || slug;
@@ -226,6 +257,7 @@ export function renderPlace(
     title: `${place.name} — ${nameJa}の災害板`,
     description: `${place.name}のいまどうか。投稿は見た時点の話です。公式ではありません。`,
     canonical: `${site}/a/${slug}/p/${place.id}`,
+    measurementId,
     body: `
       <nav><a href="/">災害板</a><a href="/a/${escapeHtml(slug)}">${escapeHtml(nameJa)}</a><a href="${escapeHtml(officialHubUrl(origin, slug))}">公式ハブ</a></nav>
       <h1>${escapeHtml(place.name)}</h1>
@@ -250,11 +282,12 @@ export function renderPlace(
   });
 }
 
-export function renderAbout(site: string, origin: string): string {
+export function renderAbout(site: string, origin: string, measurementId?: string | null): string {
   return page({
     title: "この板について — 災害板",
     description: "災害板は公式ハブではありません。OpenNavi の場所台帳から、町ごとの未確認カードを立てます。人と人の仲介はしません。",
     canonical: `${site}/about`,
+    measurementId,
     body: `
       <nav><a href="/">災害板</a><a href="${escapeHtml(origin)}">OpenNavi（公式ハブ）</a></nav>
       <h1>この板について</h1>
@@ -275,11 +308,12 @@ export function renderAbout(site: string, origin: string): string {
   });
 }
 
-export function renderNotFound(site: string): string {
+export function renderNotFound(site: string, measurementId?: string | null): string {
   return page({
     title: "見つかりません — 災害板",
     description: "指定した町の板はありません。",
     canonical: `${site}/`,
+    measurementId,
     body: `<h1>見つかりません</h1><p><a href="/">開いている町の一覧へ</a></p>`,
   });
 }

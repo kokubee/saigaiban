@@ -25,6 +25,7 @@ export default {
     const url = new URL(request.url);
     const origin = opennaviOrigin(env.OPENNAVI_ORIGIN);
     const site = String(env.SITE_ORIGIN || "https://saigaiban.com").replace(/\/+$/, "");
+    const measurementId = String(env.GA4_MEASUREMENT_ID || "").trim();
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
     try {
@@ -41,39 +42,39 @@ export default {
         return text(renderSitemap(site, meta.areas.map((a) => a.slug)), "application/xml; charset=utf-8");
       }
       if (path === "/about") {
-        return html(renderAbout(site, origin));
+        return html(renderAbout(site, origin, measurementId));
       }
       if (path === "/") {
-        return html(renderHome(site, origin, meta));
+        return html(renderHome(site, origin, meta, measurementId));
       }
 
       const placePath = path.match(/^\/a\/([a-z0-9-]+)\/p\/([0-9a-f-]{8,})$/i);
       if (placePath) {
         const slug = placePath[1];
         const placeId = placePath[2];
-        if (!meta.areas.some((a) => a.slug === slug)) return html(renderNotFound(site), 404);
+        if (!meta.areas.some((a) => a.slug === slug)) return html(renderNotFound(site, measurementId), 404);
         const place = await fetchPlaceById(origin, placeId);
-        if (!place || place.area !== slug) return html(renderNotFound(site), 404);
+        if (!place || place.area !== slug) return html(renderNotFound(site, measurementId), 404);
 
         if (request.method === "POST") {
           return handlePost(request, env, site, slug, place);
         }
         const notice = url.searchParams.get("ok") === "1" ? "受け取りました。公式ではありません。地図と公式ハブも見てください。" : url.searchParams.get("err");
         const reports = await listReports(env.DB, place.id);
-        return html(renderPlace(site, origin, meta, slug, place, reports, notice), 200, "private, no-store");
+        return html(renderPlace(site, origin, meta, slug, place, reports, notice, measurementId), 200, "private, no-store");
       }
 
       const town = path.match(/^\/a\/([a-z0-9-]+)$/);
       if (town) {
         const slug = town[1];
-        if (!meta.areas.some((a) => a.slug === slug)) return html(renderNotFound(site), 404);
+        if (!meta.areas.some((a) => a.slug === slug)) return html(renderNotFound(site, measurementId), 404);
         const showAll = url.searchParams.get("all") === "1";
         const page = await fetchPlaces(origin, slug, { limit: showAll ? 200 : 80 });
         const summaries = await latestByPlaces(env.DB, page.places.map((p) => p.id));
-        return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries));
+        return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries, measurementId));
       }
 
-      return html(renderNotFound(site), 404);
+      return html(renderNotFound(site, measurementId), 404);
     } catch (error) {
       const message = error instanceof Error ? error.message : "error";
       return html(

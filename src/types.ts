@@ -51,5 +51,6 @@ export type PlaceSummary = {
 export type Env = {
   OPENNAVI_ORIGIN: string;
   SITE_ORIGIN: string;
+  GA4_MEASUREMENT_ID?: string;
   DB: D1Database;
 };
