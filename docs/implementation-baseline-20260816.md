@@ -4,6 +4,7 @@
 対象: `/Users/kokubee/code2026/saigaiban` `main`
 コード基準: `382b1b7`
 計画更新: `66952a3`
+P0初回実装: `dc93a54`（証拠・鮮度projection、テレメトリallowlist）
 
 ## 1. P-1の判定
 
