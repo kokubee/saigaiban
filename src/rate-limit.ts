@@ -32,6 +32,14 @@ export async function purgeExpiredIpHashes(db: D1Database): Promise<void> {
           AND julianday(created_at) < julianday('now', '-24 hours')`,
     )
     .run();
+  await db
+    .prepare(
+      `UPDATE report_flags
+          SET ip_hash = NULL
+        WHERE ip_hash IS NOT NULL
+          AND julianday(created_at) < julianday('now', '-24 hours')`,
+    )
+    .run();
 }
 
 export const IP_HASH_RETENTION_MS = RETENTION_MS;

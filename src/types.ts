@@ -31,6 +31,8 @@ export type BoardPlacesPage = {
 export type Verdict = "open" | "limited" | "closed" | "still" | "changed" | "maps";
 
 export type ReportRole = "visitor" | "owner";
+export type ReportModerationStatus = "visible" | "hidden";
+export type ReportReviewStatus = "unknown" | "confirmed" | "disputed";
 
 export type Report = {
   id: string;
@@ -42,6 +44,8 @@ export type Report = {
   created_at: string;
   role: ReportRole;
   prefer_maps: boolean;
+  moderation_status?: ReportModerationStatus;
+  review_status?: ReportReviewStatus;
   evidence?: EvidenceProjection;
 };
 
@@ -87,9 +91,13 @@ export type Env = {
   PUBLIC_POSTING_MODE?: string;
   /** Cloudflare Turnstile site key (public); paired with the secret key. */
   PUBLIC_TURNSTILE_SITE_KEY?: string;
+  /** Comma-separated production hostnames accepted in Turnstile responses. */
+  PUBLIC_TURNSTILE_HOSTNAMES?: string;
   /** Cloudflare Turnstile secret; configure as a Wrangler secret, never a public var. */
   TURNSTILE_SECRET_KEY?: string;
   /** HMAC secret for the short-lived rate-limit token; configure as a Wrangler secret. */
   RATE_LIMIT_HMAC_SECRET?: string;
+  /** Admin token for moderation API; configure as a Wrangler secret. */
+  MODERATION_ADMIN_TOKEN?: string;
   DB: D1Database;
 };

@@ -11,15 +11,20 @@ import { fetchMeta, fetchPlaceById, fetchPlaces, officialSupportUrl, opennaviOri
 import {
   allowedOrigin,
   cleanNote,
+  flagReport,
   insertReport,
   latestByPlaces,
   listReports,
+  moderateReport,
+  parseFlagReason,
+  parseModerationAction,
   resolvePost,
 } from "./reports.ts";
 import { isShopLike } from "./labels.ts";
 import { publicPostingEnabled } from "./posting.ts";
 import { purgeExpiredIpHashes, rateLimitConfigured, shortIpHmac } from "./rate-limit.ts";
-import { turnstileConfigured, verifyTurnstile } from "./turnstile.ts";
+import { adminRequestHeadersAllowed, reportRequestHeadersAllowed } from "./request.ts";
+import { turnstileConfigured, turnstileHostnames, verifyTurnstile } from "./turnstile.ts";
 import type { BoardPlace, Env } from "./types.ts";
 
 export default {
@@ -29,7 +34,8 @@ export default {
     const site = String(env.SITE_ORIGIN || "https://saigaiban.com").replace(/\/+$/, "");
     const measurementId = String(env.GA4_MEASUREMENT_ID || "").trim();
     const turnstileSiteKey = String(env.PUBLIC_TURNSTILE_SITE_KEY || "").trim();
-    const turnstileReady = turnstileConfigured(env.TURNSTILE_SECRET_KEY, turnstileSiteKey);
+    const turnstileAllowedHostnames = turnstileHostnames(env.PUBLIC_TURNSTILE_HOSTNAMES);
+    const turnstileReady = turnstileConfigured(env.TURNSTILE_SECRET_KEY, turnstileSiteKey, turnstileAllowedHostnames);
     const postingEnabled = publicPostingEnabled(env.PUBLIC_POSTING_MODE) && turnstileReady && rateLimitConfigured(env.RATE_LIMIT_HMAC_SECRET);
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
@@ -42,6 +48,15 @@ export default {
       }
       if (path === "/support" || path.startsWith("/support/tourism/")) {
         return Response.redirect(officialSupportUrl(origin), 302);
+      }
+
+      const flagPath = path.match(/^\/api\/reports\/([0-9a-f-]{8,})\/flag$/i);
+      if (flagPath && request.method === "POST") {
+        return handleFlag(request, env, site, flagPath[1]);
+      }
+      const moderationPath = path.match(/^\/api\/admin\/reports\/([0-9a-f-]{8,})\/moderate$/i);
+      if (moderationPath && request.method === "POST") {
+        return handleModeration(request, env, moderationPath[1]);
       }
 
       const earlyPlacePath = path.match(/^\/a\/([a-z0-9-]+)\/p\/([0-9a-f-]{8,})$/i);
@@ -70,7 +85,7 @@ export default {
         if (!place || place.area !== slug) return html(renderNotFound(site, measurementId), 404);
 
         if (request.method === "POST") {
-          return handlePost(request, env, site, slug, place, postingEnabled, env.TURNSTILE_SECRET_KEY);
+          return handlePost(request, env, site, slug, place, postingEnabled, env.TURNSTILE_SECRET_KEY, turnstileAllowedHostnames);
         }
         const notice = url.searchParams.get("ok") === "1" ? "受け取りました。公式ではありません。地図と公式ハブも見てください。" : url.searchParams.get("err");
         const reports = await listReports(env.DB, place.id);
@@ -109,6 +124,7 @@ async function handlePost(
   place: BoardPlace,
   postingEnabled: boolean,
   turnstileSecretKey?: string,
+  turnstileAllowedHostnames: ReadonlySet<string> = new Set(["saigaiban.com", "www.saigaiban.com"]),
 ): Promise<Response> {
   const dest = `/a/${slug}/p/${place.id}`;
   if (request.method !== "POST") return Response.redirect(`${site}${dest}`, 303);
@@ -118,9 +134,18 @@ async function handlePost(
   if (!allowedOrigin(request, site)) {
     return redirect(site, dest, "この画面から送ってください。");
   }
+  if (!reportRequestHeadersAllowed(request)) {
+    return redirect(site, dest, "投稿データの形式またはサイズが不正です。");
+  }
+  const ip = request.headers.get("CF-Connecting-IP")?.trim();
+  if (!ip) {
+    return redirect(site, dest, "この接続では投稿を受け付けられません。");
+  }
   const form = await request.formData();
-  const ip = request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For") || "unknown";
-  if (!(await verifyTurnstile(form.get("cf-turnstile-response"), turnstileSecretKey, ip))) {
+  if (!(await verifyTurnstile(form.get("cf-turnstile-response"), turnstileSecretKey, ip, {
+    action: "report_submit",
+    allowedHostnames: turnstileAllowedHostnames,
+  }))) {
     return redirect(site, dest, "確認に失敗しました。もう一度お試しください。");
   }
   const decided = resolvePost({
@@ -147,6 +172,53 @@ async function handlePost(
   return Response.redirect(`${site}${dest}?ok=1`, 303);
 }
 
+async function handleFlag(request: Request, env: Env, site: string, reportId: string): Promise<Response> {
+  if (!allowedOrigin(request, site)) return json({ ok: false, error: "この画面から送ってください。" }, 403);
+  if (!reportRequestHeadersAllowed(request)) return json({ ok: false, error: "通報データの形式またはサイズが不正です。" }, 413);
+  const ip = request.headers.get("CF-Connecting-IP")?.trim();
+  if (!ip) return json({ ok: false, error: "この接続では通報を受け付けられません。" }, 400);
+  const token = await shortIpHmac(ip, env.RATE_LIMIT_HMAC_SECRET);
+  if (!token) return json({ ok: false, error: "通報受付の準備ができていません。" }, 503);
+  const form = await request.formData();
+  const reason = parseFlagReason(form.get("reason"));
+  if (!reason) return json({ ok: false, error: "通報理由を選んでください。" }, 400);
+  const result = await flagReport(env.DB, reportId, reason, token);
+  return result.ok ? json({ ok: true }, 202) : json(result, 400);
+}
+
+async function handleModeration(request: Request, env: Env, reportId: string): Promise<Response> {
+  if (!await secretMatches(request.headers.get("Authorization") || "", env.MODERATION_ADMIN_TOKEN || "")) {
+    return json({ ok: false, error: "認証が必要です。" }, 401);
+  }
+  if (!adminRequestHeadersAllowed(request)) return json({ ok: false, error: "管理データの形式またはサイズが不正です。" }, 413);
+  let body: { action?: unknown };
+  try {
+    body = await request.json() as { action?: unknown };
+  } catch {
+    return json({ ok: false, error: "JSONが不正です。" }, 400);
+  }
+  const action = parseModerationAction(body.action);
+  if (!action) return json({ ok: false, error: "管理操作が不正です。" }, 400);
+  const result = await moderateReport(env.DB, reportId, action, "moderator");
+  return result.ok ? json({ ok: true }, 200) : json(result, 404);
+}
+
+async function secretMatches(provided: string, expected: string): Promise<boolean> {
+  if (!provided || !expected) return false;
+  const prefix = "Bearer ";
+  if (!provided.startsWith(prefix)) return false;
+  const actual = provided.slice(prefix.length);
+  const [left, right] = await Promise.all([
+    crypto.subtle.digest("SHA-256", new TextEncoder().encode(actual)),
+    crypto.subtle.digest("SHA-256", new TextEncoder().encode(expected)),
+  ]);
+  const a = new Uint8Array(left);
+  const b = new Uint8Array(right);
+  let diff = actual.length === expected.length ? 0 : 1;
+  for (let i = 0; i < a.length; i += 1) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
 function redirect(site: string, dest: string, err: string): Response {
   const u = new URL(dest, site);
   u.searchParams.set("err", err);
@@ -169,6 +241,6 @@ function text(body: string, type: string): Response {
   });
 }
 
-function json(body: unknown): Response {
-  return Response.json(body);
+function json(body: unknown, status = 200): Response {
+  return Response.json(body, { status });
 }

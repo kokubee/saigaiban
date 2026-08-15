@@ -6,11 +6,12 @@ import { escapeHtml, gaSnippet, renderHome, renderPlace, renderTown } from "../s
 import { categoryLabel, isShelter } from "../src/labels.ts";
 import { googleMapsSearchUrl } from "../src/maps.ts";
 import { officialHubUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
-import { cleanNote, parseVerdict, resolvePost } from "../src/reports.ts";
+import { cleanNote, parseFlagReason, parseModerationAction, parseVerdict, resolvePost } from "../src/reports.ts";
 import { publicPostingEnabled, publicPostingMode } from "../src/posting.ts";
 import { purgeExpiredIpHashes, rateLimitConfigured, shortIpHmac } from "../src/rate-limit.ts";
+import { reportRequestHeadersAllowed } from "../src/request.ts";
 import { sanitizeTelemetry, telemetryAllowlist } from "../src/telemetry.ts";
-import { turnstileConfigured, verifyTurnstile } from "../src/turnstile.ts";
+import { turnstileConfigured, turnstileHostnames, verifyTurnstile } from "../src/turnstile.ts";
 import worker from "../src/index.ts";
 import type { Env } from "../src/types.ts";
 
@@ -60,6 +61,31 @@ test("shadow cache writes but returns the origin response", async () => {
   }
 });
 
+test("cache fetch passes an abort signal and malformed cache falls back to origin", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalCaches = (globalThis as typeof globalThis & { caches?: unknown }).caches;
+  let sawSignal = false;
+  const key = new Request("https://saigaiban.com/__edge-cache/opennavi?url=https%3A%2F%2Fopennavi.org%2Fapi%2Fboard%2Fmeta");
+  const cache = {
+    async match() {
+      return new Response("not-json");
+    },
+    async put() {},
+  };
+  (globalThis as typeof globalThis & { caches?: unknown }).caches = { default: cache };
+  globalThis.fetch = async (_input, init) => {
+    sawSignal = Boolean(init?.signal);
+    return new Response(JSON.stringify({ source: "origin" }), { headers: { "content-type": "application/json" } });
+  };
+  try {
+    assert.deepEqual(await getCachedJson("https://opennavi.org/api/board/meta", "on", 60, 300), { source: "origin" });
+    assert.equal(sawSignal, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    (globalThis as typeof globalThis & { caches?: unknown }).caches = originalCaches;
+  }
+});
+
 test("evidence separates authority, review, and freshness", () => {
   const now = Date.parse("2026-08-16T00:00:00Z");
   const resident = reportEvidence("2026-08-15T12:00:00Z", "visitor", now);
@@ -100,17 +126,18 @@ test("public posting is closed unless explicitly enabled", () => {
 });
 
 test("Turnstile must be configured and verified before intake can open", async () => {
-  assert.equal(turnstileConfigured("secret", ""), false);
-  assert.equal(turnstileConfigured("secret", "site-key-123456"), true);
+  const hosts = turnstileHostnames("saigaiban.com,www.saigaiban.com");
+  assert.equal(turnstileConfigured("secret", "", hosts), false);
+  assert.equal(turnstileConfigured("secret", "site-key-123456", hosts), true);
   assert.equal(await verifyTurnstile("", "secret"), false);
   const originalFetch = globalThis.fetch;
   let requestBody = "";
   globalThis.fetch = async (_input, init) => {
     requestBody = String(init?.body || "");
-    return new Response(JSON.stringify({ success: true }), { status: 200 });
+    return new Response(JSON.stringify({ success: true, action: "report_submit", hostname: "saigaiban.com" }), { status: 200 });
   };
   try {
-    assert.equal(await verifyTurnstile("token-123", "secret", "192.0.2.1"), true);
+    assert.equal(await verifyTurnstile("token-123", "secret", "192.0.2.1", { action: "report_submit", allowedHostnames: hosts }), true);
     const body = new URLSearchParams(requestBody);
     assert.equal(body.get("secret"), "secret");
     assert.equal(body.get("response"), "token-123");
@@ -118,6 +145,37 @@ test("Turnstile must be configured and verified before intake can open", async (
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("report POST headers are bounded before formData", () => {
+  assert.equal(reportRequestHeadersAllowed(new Request("https://saigaiban.com", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded", "content-length": "120" },
+  })), true);
+  assert.equal(reportRequestHeadersAllowed(new Request("https://saigaiban.com", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded", "content-length": "9000" },
+  })), false);
+  assert.equal(reportRequestHeadersAllowed(new Request("https://saigaiban.com", {
+    method: "POST",
+    headers: { "content-type": "application/json", "content-length": "120" },
+  })), false);
+});
+
+test("moderation inputs are finite and the admin route fails closed", async () => {
+  assert.equal(parseFlagReason("privacy"), "privacy");
+  assert.equal(parseFlagReason("free-form"), null);
+  assert.equal(parseModerationAction("hide"), "hide");
+  assert.equal(parseModerationAction("delete-all"), null);
+  const response = await worker.fetch(
+    new Request("https://saigaiban.com/api/admin/reports/12345678/moderate", {
+      method: "POST",
+      headers: { "content-type": "application/json", "content-length": "18" },
+      body: JSON.stringify({ action: "hide" }),
+    }),
+    { OPENNAVI_ORIGIN: "https://opennavi.org", SITE_ORIGIN: "https://saigaiban.com", DB: {} } as unknown as Env,
+  );
+  assert.equal(response.status, 401);
 });
 
 test("rate-limit identity is a rotating HMAC and short secret is required", async () => {

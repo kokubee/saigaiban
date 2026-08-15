@@ -33,6 +33,8 @@ select,textarea,button{font:inherit}
 select,textarea{width:100%;max-width:28rem;padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff}
 .check{display:flex;gap:8px;align-items:flex-start;margin:10px 0;font-weight:400}
 .owner{background:#fff4e8;border:1px solid #e8c8a0;border-radius:8px;padding:10px 12px;margin:10px 0}
+.flag{display:inline-flex;gap:6px;align-items:center;margin-left:8px}
+.flag select,.flag button{font-size:.8rem;padding:2px 5px;margin:0}
 textarea{min-height:4.5rem}
 button{background:var(--accent);color:#fff8ee;border:0;border-radius:8px;padding:8px 16px;margin-top:10px}
 .flash{background:#fff3d6;border:1px solid #e0c48a;padding:10px 12px;border-radius:8px}
@@ -265,7 +267,8 @@ export function renderPlace(
             const note = r.note ? ` — ${escapeHtml(r.note)}` : "";
             const maps = r.prefer_maps ? " / 地図へ寄せる" : "";
             const evidence = r.evidence || { authority: r.role === "owner" ? "operator" : "resident", review: "unknown", freshness: "unknown" } as const;
-            return `<li>${escapeHtml(formatWhen(r.created_at))}　${escapeHtml(who)}　${escapeHtml(VERDICT_LABEL[r.verdict])}　${escapeHtml(evidenceLabel(evidence))}${maps}${note}</li>`;
+            const flag = `<form class="flag" method="post" action="/api/reports/${escapeHtml(r.id)}/flag"><select name="reason" aria-label="通報理由"><option value="misleading">内容が不正確</option><option value="privacy">個人情報</option><option value="unsafe">危険な内容</option><option value="other">その他</option></select><button type="submit">通報</button></form>`;
+            return `<li>${escapeHtml(formatWhen(r.created_at))}　${escapeHtml(who)}　${escapeHtml(VERDICT_LABEL[r.verdict])}　${escapeHtml(evidenceLabel(evidence))}${maps}${note}${flag}</li>`;
           })
           .join("")}</ul>`;
   const shelter = isShelter(place.category)
@@ -302,7 +305,7 @@ export function renderPlace(
         </select>
         <label for="note">短いメモ（任意・80字まで）</label>
         <textarea id="note" name="note" maxlength="80" placeholder="例: 15時ごろ、棚は少なかった"></textarea>
-        <div class="cf-turnstile" data-sitekey="${escapeHtml(turnstileSiteKey || "")}"></div>
+        <div class="cf-turnstile" data-sitekey="${escapeHtml(turnstileSiteKey || "")}" data-action="report_submit"></div>
         <button type="submit">投稿する</button>
       </form><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`
     : "";

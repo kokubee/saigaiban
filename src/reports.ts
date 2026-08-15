@@ -1,5 +1,5 @@
 import { reportEvidence } from "./evidence.ts";
-import type { PlaceSummary, Report, ReportRole, Verdict } from "./types.ts";
+import type { PlaceSummary, Report, ReportModerationStatus, ReportReviewStatus, ReportRole, Verdict } from "./types.ts";
 
 export const VERDICTS: Verdict[] = ["open", "limited", "closed", "still", "changed", "maps"];
 
@@ -30,13 +30,19 @@ export function wantsMaps(raw: unknown): boolean {
   return value === "1" || value === "on" || value === "true";
 }
 
-function asReport(row: Report & { prefer_maps?: number | boolean; role?: string }): Report {
+function asReport(row: Report & { prefer_maps?: number | boolean; role?: string; moderation_status?: string; review_status?: string }): Report {
   const role = row.role === "owner" ? "owner" : "visitor";
+  const review: ReportReviewStatus = row.review_status === "confirmed" || row.review_status === "disputed" ? row.review_status : "unknown";
+  const moderation: ReportModerationStatus = row.moderation_status === "hidden" ? "hidden" : "visible";
+  const evidence = reportEvidence(row.created_at, role);
+  evidence.review = review;
   return {
     ...row,
     role,
     prefer_maps: Boolean(row.prefer_maps),
-    evidence: reportEvidence(row.created_at, role),
+    moderation_status: moderation,
+    review_status: review,
+    evidence,
   };
 }
 
@@ -152,8 +158,9 @@ export async function latestByPlaces(db: D1Database, placeIds: string[]): Promis
   const marks = chunk.map(() => "?").join(", ");
   const { results } = await db
     .prepare(
-      `SELECT id, place_id, area, seed_key, verdict, note, created_at, role, prefer_maps
+      `SELECT id, place_id, area, seed_key, verdict, note, created_at, role, prefer_maps, moderation_status, review_status
          FROM reports WHERE place_id IN (${marks})
+           AND (moderation_status IS NULL OR moderation_status != 'hidden')
          ORDER BY created_at DESC`,
     )
     .bind(...chunk)
@@ -176,13 +183,79 @@ export async function latestByPlaces(db: D1Database, placeIds: string[]): Promis
 export async function listReports(db: D1Database, placeId: string, limit = 20): Promise<Report[]> {
   const { results } = await db
     .prepare(
-      `SELECT id, place_id, area, seed_key, verdict, note, created_at, role, prefer_maps
+      `SELECT id, place_id, area, seed_key, verdict, note, created_at, role, prefer_maps, moderation_status, review_status
          FROM reports WHERE place_id = ?
+           AND (moderation_status IS NULL OR moderation_status != 'hidden')
          ORDER BY created_at DESC LIMIT ?`,
     )
     .bind(placeId, limit)
     .all<Report>();
   return (results || []).map(asReport);
+}
+
+export type FlagReason = "privacy" | "misleading" | "unsafe" | "other";
+export type ModerationAction = "hide" | "restore" | "confirm" | "dispute" | "dismiss";
+
+export function parseFlagReason(raw: unknown): FlagReason | null {
+  const value = String(raw || "").trim();
+  return ["privacy", "misleading", "unsafe", "other"].includes(value) ? value as FlagReason : null;
+}
+
+export function parseModerationAction(raw: unknown): ModerationAction | null {
+  const value = String(raw || "").trim();
+  return ["hide", "restore", "confirm", "dispute", "dismiss"].includes(value) ? value as ModerationAction : null;
+}
+
+export async function flagReport(
+  db: D1Database,
+  reportId: string,
+  reason: FlagReason,
+  ipHash: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const report = await db.prepare("SELECT id FROM reports WHERE id = ? LIMIT 1").bind(reportId).first<{ id: string }>();
+  if (!report) return { ok: false, error: "報告が見つかりません。" };
+  const recent = await db
+    .prepare(
+      `SELECT id FROM report_flags
+         WHERE report_id = ? AND ip_hash = ? AND created_at > datetime('now', '-10 minutes')
+         LIMIT 1`,
+    )
+    .bind(reportId, ipHash)
+    .first<{ id: string }>();
+  if (recent) return { ok: false, error: "通報はしばらく間をあけてください。" };
+  await db
+    .prepare("INSERT INTO report_flags (id, report_id, reason, created_at, ip_hash) VALUES (?, ?, ?, ?, ?)")
+    .bind(crypto.randomUUID(), reportId, reason, new Date().toISOString(), ipHash)
+    .run();
+  return { ok: true };
+}
+
+export async function moderateReport(
+  db: D1Database,
+  reportId: string,
+  action: ModerationAction,
+  actorId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const report = await db.prepare("SELECT id FROM reports WHERE id = ? LIMIT 1").bind(reportId).first<{ id: string }>();
+  if (!report) return { ok: false, error: "報告が見つかりません。" };
+  const moderation = action === "hide" ? "hidden" : "visible";
+  const review = action === "confirm" ? "confirmed" : action === "dispute" ? "disputed" : action === "dismiss" ? "unknown" : null;
+  if (review) {
+    await db
+      .prepare("UPDATE reports SET moderation_status = ?, review_status = ?, moderated_at = ?, moderated_by = ? WHERE id = ?")
+      .bind(moderation, review, new Date().toISOString(), actorId, reportId)
+      .run();
+  } else {
+    await db
+      .prepare("UPDATE reports SET moderation_status = ?, moderated_at = ?, moderated_by = ? WHERE id = ?")
+      .bind(moderation, new Date().toISOString(), actorId, reportId)
+      .run();
+  }
+  await db
+    .prepare("INSERT INTO moderation_audit (id, report_id, action, actor_id, created_at) VALUES (?, ?, ?, ?, ?)")
+    .bind(crypto.randomUUID(), reportId, action, actorId, new Date().toISOString())
+    .run();
+  return { ok: true };
 }
 
 export function formatWhen(iso: string): string {

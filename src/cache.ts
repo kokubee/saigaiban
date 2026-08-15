@@ -1,4 +1,6 @@
 export type PublicCacheMode = "off" | "shadow" | "on";
+const OPENNAVI_FETCH_TIMEOUT_MS = 5_000;
+const MAX_OPENNAVI_JSON_BYTES = 1_000_000;
 
 function defaultCache(): Cache | null {
   try {
@@ -37,19 +39,35 @@ export async function getCachedJson(
 
   if (cache && mode === "on") {
     const hit = await cache.match(key);
-    if (hit) return hit.json();
+    if (hit) {
+      try {
+        return await hit.json();
+      } catch {
+        // Ignore malformed cache entries and fall back to origin.
+      }
+    }
   }
   if (cache && mode === "shadow") {
     shadowHit = (await cache.match(key)) || null;
   }
 
-  const res = await fetch(url, {
-    headers: { Accept: "application/json", "User-Agent": "saigaiban/0.1 (+https://saigaiban.com)" },
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), OPENNAVI_FETCH_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": "saigaiban/0.1 (+https://saigaiban.com)" },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`opennavi ${res.status} ${url}`);
 
-  const body = await res.text();
+  const declaredLength = Number(res.headers.get("content-length") || "0");
+  if (declaredLength > MAX_OPENNAVI_JSON_BYTES) throw new Error(`opennavi response too large ${url}`);
+  const body = await readBoundedText(res, MAX_OPENNAVI_JSON_BYTES);
   if (cache && mode === "shadow" && shadowHit) {
     try {
       const cachedBody = await shadowHit.text();
@@ -74,4 +92,29 @@ export async function getCachedJson(
     }
   }
   return JSON.parse(body) as unknown;
+}
+
+async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+  if (!response.body) return response.text();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) throw new Error("response too large");
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(merged);
 }
