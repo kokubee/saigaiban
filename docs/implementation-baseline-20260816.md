@@ -13,6 +13,8 @@ P0 cache追補: `57d3245`（shadow書込、origin応答、ETag／Last-Modified�
 P0 moderation／request追補: `9e60dda`（公開／レビュー状態の独立更新、D1 batch監査、通報UIゲート、本文上限、Turnstile厳格検証、CFヘッダ、fetch timeout、日時比較、303復帰）
 P2確認表示追補: `c1c4ddf`（通報成功後の受付完了メッセージ）
 
+本番反映: 2026-08-16、D1 `0003_moderation.sql` 適用済み、Worker version `9b40188b-e20d-4067-852d-d78622483f11` を `PUBLIC_POSTING_MODE=off` でデプロイ済み。`RATE_LIMIT_HMAC_SECRET`、`TURNSTILE_SECRET_KEY`、`MODERATION_ADMIN_TOKEN` は未設定のため、投稿・通報・管理APIはfail-closedのまま。
+
 ## 1. P-1の判定
 
 P-1「Baseline / Contract Reconciliation」は完了とする。ここではコードを変更せず、現行実装・OpenNavi依存・未実装を分離した。
@@ -140,4 +142,4 @@ P0実装時に、最低限次のテストを追加する。
 - 外部支援・旅行プロバイダへの送信
 - 投稿受付の再開
 
-P-1のベースラインをもとに、P0追補では投稿受付を既定OFFに固定した。`PUBLIC_POSTING_MODE=on` は、write ownershipの承認、D1 migration適用後の実DB確認、Turnstile・短期HMAC・保持期限・moderation監査の運用確認後に限って有効化する。**読み取り専用のデプロイも、0003先行適用と通報を有効にする場合のHMAC／実D1確認が済むまでHOLD**とする。OpenNavi側の変更はこのリポジトリへ混ぜない。
+P-1のベースラインをもとに、P0追補では投稿受付を既定OFFに固定した。`0003_moderation.sql` の先行適用と実D1確認を完了し、OFFの読み取り専用Workerはデプロイ済みである。`PUBLIC_POSTING_MODE=on` は、write ownershipの承認、Turnstile・短期HMAC・保持期限・moderation監査の運用確認後に限って有効化する。OpenNavi側の変更はこのリポジトリへ混ぜない。
