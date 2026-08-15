@@ -538,11 +538,10 @@ export function renderNotFound(site: string, measurementId?: string | null): str
 }
 
 function footer(origin: string, meta: BoardMeta | null, slug?: string): string {
-  const osm = meta?.placeLicense?.osm || "地図データは OpenStreetMap の寄与者によるものです（ODbL）。";
-  const gsi = meta?.placeLicense?.gsi || "指定緊急避難場所は国土地理院データを含みます。";
   return `<footer class="foot">
-    <p>${escapeHtml(osm)}</p>
-    <p>${escapeHtml(gsi)}</p>
+    <p>場所台帳: <a href="https://www.openstreetmap.org/copyright" rel="license noopener">© OpenStreetMap contributors</a>（ODbL）</p>
+    <p>避難所台帳: <a href="https://web2.gsi.go.jp/bousaichiri/hinanbasho-menseki.html" rel="noopener">国土地理院「指定緊急避難場所・指定避難所データ」</a>（利用上の注意に従って利用）</p>
+    <p class="note">避難所データは台帳であり、開設中とは限りません。最新状況は自治体・公式ハブで確認してください。</p>
     <p>OpenNavi被災者向け入口: <a href="${escapeHtml(officialVictimUrl(origin, slug))}">${escapeHtml(officialVictimUrl(origin, slug))}</a></p>
   </footer>`;
 }

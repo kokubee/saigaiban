@@ -238,6 +238,9 @@ test("place page hides the report form while public posting is closed", () => {
   assert.match(html, /投稿受付を停止しています/);
   assert.doesNotMatch(html, /opennavi\.org\/#open-areas/);
   assert.match(html, /opennavi\.org\/a\/mobara/);
+  assert.match(html, /openstreetmap\.org\/copyright/);
+  assert.match(html, /web2\.gsi\.go\.jp\/bousaichiri\/hinanbasho-menseki\.html/);
+  assert.doesNotMatch(html, /帰属表示必須/);
   const townHtml = renderTown("https://saigaiban.com", "https://opennavi.org", meta, "mobara", [place], false, new Map(), null, false);
   assert.doesNotMatch(townHtml, /いまどうかを書く/);
   assert.match(townHtml, /これまでの報告を見る/);
