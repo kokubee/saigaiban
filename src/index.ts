@@ -7,7 +7,7 @@ import {
   renderSitemap,
   renderTown,
 } from "./html.ts";
-import { fetchMeta, fetchPlaceById, fetchPlaces, officialSupportUrl, opennaviOrigin } from "./opennavi.ts";
+import { fetchMeta, fetchPlaceById, fetchPlaces, officialSupportUrl, officialVictimUrl, opennaviOrigin } from "./opennavi.ts";
 import {
   allowedOrigin,
   cleanNote,
@@ -117,7 +117,7 @@ export default {
     } catch (error) {
       const message = error instanceof Error ? error.message : "error";
       return html(
-        `<!doctype html><meta charset="utf-8"><title>災害板</title><p>いま板を開けません。公式ハブを見てください。</p><p><a href="${origin}">OpenNavi</a></p><!-- ${message.replace(/</g, "")} -->`,
+        `<!doctype html><meta charset="utf-8"><title>災害板</title><p>いま板を開けません。公式ハブを見てください。</p><p><a href="${officialVictimUrl(origin)}">OpenNavi（被災者向け）</a></p><!-- ${message.replace(/</g, "")} -->`,
         502,
       );
     }

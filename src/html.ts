@@ -1,6 +1,6 @@
 import { CATEGORY_FILTERS, categoryLabel, isShelter, isShopLike, isKnownCategory, prefName } from "./labels.ts";
 import { googleMapsSearchUrl } from "./maps.ts";
-import { officialHubUrl, officialSupportUrl } from "./opennavi.ts";
+import { officialHubUrl, officialSupportUrl, officialVictimUrl } from "./opennavi.ts";
 import { evidenceLabel } from "./evidence.ts";
 import { VERDICT_LABEL, VISITOR_VERDICTS, formatWhen } from "./reports.ts";
 import { tourismAreaConfig } from "./tourism-areas.ts";
@@ -119,6 +119,7 @@ export function renderHome(
   measurementId?: string | null,
   selectedPref?: string | null,
 ): string {
+  const victimUrl = officialVictimUrl(origin);
   const byPref = new Map<string, typeof meta.areas>();
   for (const area of meta.areas) {
     const key = area.prefCode || "00";
@@ -154,10 +155,10 @@ export function renderHome(
     canonical: `${site}/`,
     measurementId,
     body: `
-      <nav><a href="/">災害板</a><a href="/about">この板について</a><a href="${escapeHtml(origin)}">OpenNavi（公式ハブ）</a></nav>
+      <nav><a href="/">災害板</a><a href="/about">この板について</a><a href="${escapeHtml(victimUrl)}">OpenNavi（被災者向け）</a></nav>
       <h1>災害板</h1>
       <p class="lead">${escapeHtml(meta.disaster.label)}について、場所ごとの「いまどうか」を書く板です。匿名の雑談スレではありません。</p>
-      <p class="note">まず都道府県と市区町村を選びます。場所一覧と投稿は市区町村ページを開いた時だけ読み込みます。案内は <a href="${escapeHtml(origin)}">OpenNavi</a> へ。</p>
+      <p class="note">まず都道府県と市区町村を選びます。場所一覧と投稿は市区町村ページを開いた時だけ読み込みます。自治体・インフラの公式情報は <a href="${escapeHtml(victimUrl)}">OpenNaviの被災者向け入口</a> へ。</p>
       ${tabs}
       ${towns}
       ${footer(origin, meta)}
@@ -372,19 +373,20 @@ export function renderPlace(
 }
 
 export function renderAbout(site: string, origin: string, measurementId?: string | null): string {
+  const victimUrl = officialVictimUrl(origin);
   return page({
     title: "この板について — 災害板",
     description: "災害版は有事の被災地で使う、場所ごとの現地報告板です。公式情報と支援者向けの案内はOpenNaviへ。",
     canonical: `${site}/about`,
     measurementId,
     body: `
-      <nav><a href="/">災害板</a><a href="${escapeHtml(origin)}">OpenNavi（公式ハブ）</a></nav>
+      <nav><a href="/">災害板</a><a href="${escapeHtml(victimUrl)}">OpenNavi（被災者向け）</a></nav>
       <h1>この板について</h1>
       <p class="lead">災害版は、被災地で場所を探し、見た時の「いまどうか」を共有するための板です。自治体・社協などの公式発表や支援窓口の代わりにはなりません。</p>
       <h2>OpenNaviとの使い分け</h2>
       <ul>
         <li>被災地で場所を探す、見た様子を書く → この災害版</li>
-        <li>公式発表を確認する、被災地の外から支援する → <a href="${escapeHtml(origin)}">OpenNavi</a></li>
+        <li>公式発表を確認する → <a href="${escapeHtml(victimUrl)}">OpenNaviの被災者向け入口</a></li>
       </ul>
       <h2>すること</h2>
       <p>OpenNavi が開いた町について、店や避難所などの場所カードを自動で立てます。最初は未確認です。見かけた人も、店の人も書けます。店側は Google マップの営業情報へ寄せることもできます。どれも公式確認ではありません。</p>
@@ -397,7 +399,7 @@ export function renderAbout(site: string, origin: string, measurementId?: string
         <li>人と人の仲介、住所つきのマッチングはしない</li>
       </ul>
       <h2>公式ハブとの関係</h2>
-      <p>場所の名前と位置は <a href="${escapeHtml(origin)}">OpenNavi</a> の台帳から受け取り、災害版の報告は現地の補足として扱います。公式情報や被災地の外から支援する案内は <a href="${escapeHtml(officialSupportUrl(origin))}">OpenNaviの公式支援ページ</a> を見てください。災害版の支援URLはOpenNaviへ案内します。</p>
+      <p>場所の名前と位置は <a href="${escapeHtml(victimUrl)}">OpenNaviの被災者向け入口</a> の台帳から受け取り、災害版の報告は現地の補足として扱います。被災地の外から支援する案内は <a href="${escapeHtml(officialSupportUrl(origin))}">OpenNaviの公式支援ページ</a> を見てください。災害版の支援URLはOpenNaviへ案内します。</p>
       ${footer(origin, null)}
     `,
   });
@@ -508,7 +510,7 @@ function footer(origin: string, meta: BoardMeta | null): string {
   return `<footer class="foot">
     <p>${escapeHtml(osm)}</p>
     <p>${escapeHtml(gsi)}</p>
-    <p>公式ハブ: <a href="${escapeHtml(origin)}">${escapeHtml(origin)}</a></p>
+    <p>OpenNavi被災者向け入口: <a href="${escapeHtml(officialVictimUrl(origin))}">${escapeHtml(officialVictimUrl(origin))}</a></p>
   </footer>`;
 }
 

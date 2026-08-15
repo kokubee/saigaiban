@@ -5,7 +5,7 @@ import { evidenceLabel, freshnessFor, reportEvidence } from "../src/evidence.ts"
 import { escapeHtml, gaSnippet, renderHome, renderPlace, renderTown } from "../src/html.ts";
 import { categoryLabel, isShelter } from "../src/labels.ts";
 import { googleMapsSearchUrl } from "../src/maps.ts";
-import { officialHubUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
+import { officialHubUrl, officialVictimUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
 import { cleanNote, flagReport, moderateReport, parseFlagReason, parseModerationAction, parseVerdict, resolvePost } from "../src/reports.ts";
 import { publicPostingEnabled, publicPostingMode } from "../src/posting.ts";
 import { purgeExpiredIpHashes, rateLimitConfigured, shortIpHmac } from "../src/rate-limit.ts";
@@ -365,6 +365,7 @@ test("POST rejects before OpenNavi or D1 access while public posting is closed",
 
 test("official hub URL uses the town slug", () => {
   assert.equal(officialHubUrl("https://opennavi.org", "mobara"), "https://opennavi.org/a/mobara");
+  assert.equal(officialVictimUrl("https://opennavi.org"), "https://opennavi.org/#open-areas");
 });
 
 test("Google Maps links search by place name and municipality, never coordinates", () => {

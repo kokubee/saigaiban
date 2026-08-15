@@ -19,6 +19,11 @@ export function officialSupportUrl(origin: string): string {
   return `${opennaviOrigin(origin)}/support`;
 }
 
+/** OpenNavi's resident/nearby entry, not the support-only page. */
+export function officialVictimUrl(origin: string): string {
+  return `${opennaviOrigin(origin)}/#open-areas`;
+}
+
 const FORBIDDEN = new Set([
   "status",
   "hours",
