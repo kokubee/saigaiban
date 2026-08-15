@@ -6,6 +6,7 @@
 計画更新: `66952a3`
 P0初回実装: `dc93a54`（証拠・鮮度projection、テレメトリallowlist）
 P0安全化追補: `b339277`（投稿受付ゲート、テレメトリ値検証、鮮度期限、店側カード表示）
+P0読み取り専用追補: `9501d27`（既知値検証、OFF時文言、外部取得前拒否、D1書込みゼロテスト）
 
 ## 1. P-1の判定
 
@@ -111,7 +112,8 @@ P0実装時に、最低限次のテストを追加する。
 7. OpenNavi 5xx／timeout／不正JSON時に推測データを返さない
 8. `PUBLIC_READ_CACHE=shadow` の挙動が「cacheへ書く・originを返す・差分を測る」になる
 9. `place_reports` に地域全体の停電・断水レコードを混在させない
-10. telemetryがallowlist外のキーと本文を送信しない
+10. telemetryがallowlist外のキー、未知の地域・カテゴリ・need・kind・verdict、本文を送信しない
+11. 投稿OFFのPOSTがOpenNavi取得とD1書込みの前に拒否される
 
 ## 7. P-1で変更しないもの
 
