@@ -17,6 +17,13 @@ P0以降の開始条件は、次の3点である。
 2. `authority`／`review`／`freshness` を別軸にした公開projectionを定義する
 3. `place_reports` と将来の `lifeline_reports` を別契約にする
 
+### write ownership決定記録
+
+- `saigaiban` は将来の `place_reports`（場所カードに紐づく現地観測）の正本候補とする。
+- OpenNaviの `/lifelines` は地域全体の停電・断水報告として別契約のlegacy経路に残し、災害板へ自動複製しない。
+- 本コミットではOpenNavi側を変更せず、二重書込を避けるため災害板の公開投稿は `PUBLIC_POSTING_MODE=off` に固定する。
+- `saigaiban` の投稿を再開するか、OpenNavi `/lifelines` をread-only／管理者専用へ移行するかは、OpenNaviリポジトリ側の別承認で確定する。
+
 ## 2. 現行データフロー
 
 ### 公開読み取り
