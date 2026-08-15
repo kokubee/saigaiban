@@ -1,3 +1,4 @@
+import { reportEvidence } from "./evidence.ts";
 import type { PlaceSummary, Report, ReportRole, Verdict } from "./types.ts";
 
 export const VERDICTS: Verdict[] = ["open", "limited", "closed", "still", "changed", "maps"];
@@ -30,10 +31,12 @@ export function wantsMaps(raw: unknown): boolean {
 }
 
 function asReport(row: Report & { prefer_maps?: number | boolean; role?: string }): Report {
+  const role = row.role === "owner" ? "owner" : "visitor";
   return {
     ...row,
-    role: row.role === "owner" ? "owner" : "visitor",
+    role,
     prefer_maps: Boolean(row.prefer_maps),
+    evidence: reportEvidence(row.created_at, role),
   };
 }
 

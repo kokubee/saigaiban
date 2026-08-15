@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { publicCacheMode } from "../src/cache.ts";
+import { evidenceLabel, freshnessFor, reportEvidence } from "../src/evidence.ts";
 import { escapeHtml, gaSnippet, renderHome } from "../src/html.ts";
 import { categoryLabel, isShelter } from "../src/labels.ts";
 import { googleMapsSearchUrl } from "../src/maps.ts";
 import { officialHubUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
 import { cleanNote, parseVerdict, resolvePost } from "../src/reports.ts";
+import { sanitizeTelemetry, telemetryAllowlist } from "../src/telemetry.ts";
 
 test("opennavi origin never falls back to localhost", () => {
   assert.equal(opennaviOrigin(""), "https://opennavi.org");
@@ -18,6 +20,26 @@ test("public OpenNavi cache is opt-in", () => {
   assert.equal(publicCacheMode("off"), "off");
   assert.equal(publicCacheMode("shadow"), "shadow");
   assert.equal(publicCacheMode("on"), "on");
+});
+
+test("evidence separates authority, review, and freshness", () => {
+  const now = Date.parse("2026-08-16T00:00:00Z");
+  const resident = reportEvidence("2026-08-15T12:00:00Z", "visitor", now);
+  assert.deepEqual(resident, { authority: "resident", review: "unknown", freshness: "fresh" });
+  assert.equal(evidenceLabel(resident), "住民報告・未確認");
+  assert.equal(freshnessFor("2026-08-14T00:00:00Z", now), "stale");
+  assert.equal(freshnessFor("not-a-date", now), "unknown");
+});
+
+test("telemetry keeps an event-specific allowlist and drops free text", () => {
+  const params = sanitizeTelemetry("report_submit", {
+    area: "mobara",
+    category: "conv",
+    verdict: "open",
+    note: "個人情報を含む自由文",
+  });
+  assert.deepEqual(params, { area: "mobara", category: "conv", verdict: "open" });
+  assert.deepEqual(telemetryAllowlist("zero_result"), ["area", "category"]);
 });
 
 test("official hub URL uses the town slug", () => {

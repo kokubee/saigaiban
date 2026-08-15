@@ -1,6 +1,7 @@
 import { categoryLabel, isShelter, isShopLike, prefName } from "./labels.ts";
 import { googleMapsSearchUrl } from "./maps.ts";
 import { officialHubUrl, officialSupportUrl } from "./opennavi.ts";
+import { evidenceLabel } from "./evidence.ts";
 import { VERDICT_LABEL, VISITOR_VERDICTS, formatWhen } from "./reports.ts";
 import { tourismAreaConfig } from "./tourism-areas.ts";
 import type { BoardMeta, BoardPlace, PlaceSummary, Report, TourismFetchResult } from "./types.ts";
@@ -217,7 +218,7 @@ function renderCard(slug: string, areaName: string, place: BoardPlace, summary?:
       : `<p class="note">店側の自己申告: ${escapeHtml(VERDICT_LABEL[owner.verdict])}（${escapeHtml(formatWhen(owner.created_at))}・公式ではない）</p>`
     : "";
   const latestLine = !steerMaps && latest && latest.role !== "owner"
-    ? `<p class="note">見かけた人: ${escapeHtml(VERDICT_LABEL[latest.verdict])}（${escapeHtml(formatWhen(latest.created_at))}・公式ではない）</p>`
+    ? `<p class="note">見かけた人: ${escapeHtml(VERDICT_LABEL[latest.verdict])}（${escapeHtml(formatWhen(latest.created_at))}・${escapeHtml(evidenceLabel(latest.evidence || { authority: "resident", review: "unknown", freshness: "unknown" }))}）</p>`
     : !owner && !latest
       ? `<p class="note">まだ投稿はありません。</p>`
       : "";
@@ -259,7 +260,8 @@ export function renderPlace(
             const who = r.role === "owner" ? "店側" : "見かけた人";
             const note = r.note ? ` — ${escapeHtml(r.note)}` : "";
             const maps = r.prefer_maps ? " / 地図へ寄せる" : "";
-            return `<li>${escapeHtml(formatWhen(r.created_at))}　${escapeHtml(who)}　${escapeHtml(VERDICT_LABEL[r.verdict])}${maps}${note}</li>`;
+            const evidence = r.evidence || { authority: r.role === "owner" ? "operator" : "resident", review: "unknown", freshness: "unknown" } as const;
+            return `<li>${escapeHtml(formatWhen(r.created_at))}　${escapeHtml(who)}　${escapeHtml(VERDICT_LABEL[r.verdict])}　${escapeHtml(evidenceLabel(evidence))}${maps}${note}</li>`;
           })
           .join("")}</ul>`;
   const shelter = isShelter(place.category)

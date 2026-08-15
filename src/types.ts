@@ -1,3 +1,5 @@
+import type { EvidenceProjection } from "./evidence.ts";
+
 export type BoardMeta = {
   disaster: { id: string; label: string };
   areas: Array<{ slug: string; nameJa: string; prefCode: string; status: string }>;
@@ -40,6 +42,7 @@ export type Report = {
   created_at: string;
   role: ReportRole;
   prefer_maps: boolean;
+  evidence?: EvidenceProjection;
 };
 
 export type PlaceSummary = {
