@@ -114,6 +114,9 @@ export async function insertReport(
     ipHash: string;
     role: ReportRole;
     preferMaps: boolean;
+    termsVersion?: string | null;
+    privacyVersion?: string | null;
+    consentedAt?: string | null;
   },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const recent = await db
@@ -132,8 +135,8 @@ export async function insertReport(
   }
   await db
     .prepare(
-      `INSERT INTO reports (id, place_id, area, seed_key, verdict, note, created_at, ip_hash, role, prefer_maps)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO reports (id, place_id, area, seed_key, verdict, note, created_at, ip_hash, role, prefer_maps, terms_version, privacy_version, consented_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       crypto.randomUUID(),
@@ -146,6 +149,9 @@ export async function insertReport(
       args.ipHash,
       args.role,
       args.preferMaps ? 1 : 0,
+      args.termsVersion || null,
+      args.privacyVersion || null,
+      args.consentedAt || null,
     )
     .run();
   return { ok: true };
@@ -211,6 +217,7 @@ export async function flagReport(
   reportId: string,
   reason: FlagReason,
   ipHash: string,
+  consent: { termsVersion?: string | null; privacyVersion?: string | null; consentedAt?: string | null } = {},
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const report = await db.prepare("SELECT id FROM reports WHERE id = ? LIMIT 1").bind(reportId).first<{ id: string }>();
   if (!report) return { ok: false, error: "報告が見つかりません。" };
@@ -224,8 +231,8 @@ export async function flagReport(
     .first<{ id: string }>();
   if (recent) return { ok: false, error: "通報はしばらく間をあけてください。" };
   await db
-    .prepare("INSERT INTO report_flags (id, report_id, reason, created_at, ip_hash) VALUES (?, ?, ?, ?, ?)")
-    .bind(crypto.randomUUID(), reportId, reason, new Date().toISOString(), ipHash)
+    .prepare("INSERT INTO report_flags (id, report_id, reason, created_at, ip_hash, terms_version, privacy_version, consented_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(crypto.randomUUID(), reportId, reason, new Date().toISOString(), ipHash, consent.termsVersion || null, consent.privacyVersion || null, consent.consentedAt || null)
     .run();
   return { ok: true };
 }

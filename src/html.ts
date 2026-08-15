@@ -70,7 +70,11 @@ nav a{margin-right:12px}
 .stay img{width:96px;height:72px;object-fit:cover;border-radius:6px;background:#eee}
 .stay h3{margin:0 0 3px}
 .credit{margin:18px 0}
+.table-wrap{overflow-x:auto;margin:12px 0}.table-wrap table{width:100%;min-width:760px;border-collapse:collapse;font-size:.82rem;line-height:1.5}.table-wrap th,.table-wrap td{padding:7px 8px;border:1px solid var(--line);vertical-align:top;text-align:left}.table-wrap thead th{white-space:nowrap;background:#f0e6d5}.table-wrap tbody th{white-space:nowrap;background:#fffaf1}
+.legal-toc{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#fffaf1;font-size:.9rem}.legal-toc a{text-decoration:none}.legal-toc a+a::before{content:"・";color:var(--muted);margin-right:8px}.legal-hold{margin:14px 0;padding:10px 12px;border-left:3px solid #c4872f;background:#fff9ed}
 .foot{margin-top:36px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:.85rem}
+.analytics-consent{position:fixed;right:16px;bottom:16px;z-index:20;max-width:min(520px,calc(100vw - 32px));padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--paper);box-shadow:0 8px 24px rgb(0 0 0 / 15%)}
+.analytics-consent p{margin:0 0 8px}.analytics-consent button{margin:0 6px 0 0}.analytics-consent a{font-size:.9rem}
 `;
 
 /** GA4。測定IDが無い／不正なら何も出さない。個人情報は送らない。 */
@@ -78,15 +82,21 @@ export function gaSnippet(measurementId: string | null | undefined): string {
   const id = String(measurementId || "").trim();
   if (!/^G-[A-Z0-9]+$/i.test(id)) return "";
   const safe = escapeHtml(id);
-  return `<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=${safe}"></script>
-<script>
-window.dataLayer = window.dataLayer || [];
-function gtag(){dataLayer.push(arguments);}
-gtag('js', new Date());
-gtag('config', '${safe}');
-</script>
-`;
+  return `<script>
+(function(){
+  var key='saigaiban_analytics_consent_v1';
+  function cookie(name){var m=document.cookie.match(new RegExp('(?:^|; )'+name+'=([^;]*)'));return m?decodeURIComponent(m[1]):'';}
+  function load(){
+    if(document.getElementById('ga4-gtag')) return;
+    window.dataLayer=window.dataLayer||[]; window.gtag=function(){window.dataLayer.push(arguments);};
+    window.gtag('js',new Date()); /* gtag('config', '${safe}') is sent only after consent. */ window.gtag('config','${safe}',{send_page_view:false});
+    var s=document.createElement('script'); s.id='ga4-gtag'; s.async=true; s.src='https://www.googletagmanager.com/gtag/js?id=${safe}'; document.head.appendChild(s);
+    window.gtag('event','page_view',{page_path:location.pathname,page_location:location.origin+location.pathname,page_title:document.title});
+  }
+  function set(v){document.cookie=key+'='+encodeURIComponent(v)+'; Max-Age=31536000; Path=/; SameSite=Lax'; location.reload();}
+  document.addEventListener('DOMContentLoaded',function(){var b=document.getElementById('analytics-consent');var c=cookie(key);if(c==='granted') load();if(!b||c) return;b.hidden=false;b.querySelector('[data-analytics-allow]').addEventListener('click',function(){set('granted')});b.querySelector('[data-analytics-deny]').addEventListener('click',function(){set('denied')});});
+})();
+</script>`;
 }
 
 function page(opts: {
@@ -108,6 +118,7 @@ function page(opts: {
 ${gaSnippet(opts.measurementId)}</head>
 <body>
 <div class="banner">ここは公式の窓口ではありません。場所の営業や開設は、地図と公式ハブで確認してください。</div>
+<aside id="analytics-consent" class="analytics-consent" hidden><p>アクセス解析（Google Analytics）を許可しますか？拒否しても災害情報は閲覧できます。</p><button type="button" data-analytics-allow>許可する</button><button type="button" data-analytics-deny>許可しない</button> <a href="/legal#privacy">詳しく見る</a></aside>
 <div class="wrap">${opts.body}</div>
 </body>
 </html>`;
@@ -344,7 +355,7 @@ export function renderPlace(
             const note = r.note ? ` — ${escapeHtml(r.note)}` : "";
             const maps = r.prefer_maps ? " / 地図へ寄せる" : "";
             const evidence = r.evidence || { authority: r.role === "owner" ? "operator" : "resident", review: "unknown", freshness: "unknown" } as const;
-            const flag = allowReporting ? `<form class="flag" method="post" action="/api/reports/${escapeHtml(r.id)}/flag"><select name="reason" aria-label="通報理由"><option value="misleading">内容が不正確</option><option value="privacy">個人情報</option><option value="unsafe">危険な内容</option><option value="other">その他</option></select><button type="submit">通報</button></form>` : "";
+            const flag = allowReporting ? `<form class="flag" method="post" action="/api/reports/${escapeHtml(r.id)}/flag"><select name="reason" aria-label="通報理由"><option value="misleading">内容が不正確</option><option value="privacy">個人情報</option><option value="unsafe">危険な内容</option><option value="other">その他</option></select><label class="check"><input type="checkbox" name="legal_consent" required>規約・ポリシーに同意</label><button type="submit">通報</button></form>` : "";
             return `<li>${escapeHtml(formatWhen(r.created_at))}　${escapeHtml(who)}　${escapeHtml(VERDICT_LABEL[r.verdict])}　${escapeHtml(evidenceLabel(evidence))}${maps}${note}${flag}</li>`;
           })
           .join("")}</ul>`;
@@ -382,6 +393,7 @@ export function renderPlace(
         </select>
         <label for="note">短いメモ（任意・80字まで）</label>
         <textarea id="note" name="note" maxlength="80" placeholder="例: 15時ごろ、棚は少なかった"></textarea>
+        <label class="check"><input type="checkbox" name="legal_consent" required> <a href="/legal#terms">利用規約</a>と<a href="/legal#privacy">プライバシーポリシー</a>を確認し、投稿に同意します。</label>
         <div class="cf-turnstile" data-sitekey="${escapeHtml(turnstileSiteKey || "")}" data-action="report_submit"></div>
         <button type="submit">投稿する</button>
       </form><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`
@@ -543,7 +555,20 @@ function footer(origin: string, meta: BoardMeta | null, slug?: string): string {
     <p>避難所台帳: <a href="https://web2.gsi.go.jp/bousaichiri/hinanbasho-menseki.html" rel="noopener">国土地理院「指定緊急避難場所・指定避難所データ」</a>（利用上の注意に従って利用）</p>
     <p class="note">避難所データは台帳であり、開設中とは限りません。最新状況は自治体・公式ハブで確認してください。</p>
     <p>OpenNavi被災者向け入口: <a href="${escapeHtml(officialVictimUrl(origin, slug))}">${escapeHtml(officialVictimUrl(origin, slug))}</a></p>
+    <p><a href="/legal#terms">利用規約</a> · <a href="/legal#privacy">プライバシーポリシー</a> · <a href="/legal#research">研究利用について</a></p>
   </footer>`;
+}
+
+export function renderLegal(
+  site: string,
+  origin: string,
+  _kind: "legal" | "terms" | "privacy" | "research",
+  measurementId?: string | null,
+): string {
+  const updated = "2026年8月16日";
+  const researchSection = `<section id="research"><h2>統計情報と研究利用について</h2><p>災害版では、サービスの利用状況を個人との対応関係がない統計情報に加工し、運用報告、研究、論文、学会発表等で利用・公表することがあります。</p><p>対象となるのは、期間別・地域別・情報カテゴリ別の閲覧件数、利用件数、掲載データ件数、応答時間などの集計情報です。</p><p>IPアドレス、投稿本文、通報本文、検索語、個人単位の閲覧履歴、その他個人を識別または推測できる情報は公表しません。少人数の地域や時間帯については、他の区分とまとめるなど、個人が推測されない形に加工します。</p><p>個人単位の行動履歴、投稿本文、通報本文などを研究対象として利用する場合は、この統計利用とは分け、研究案件ごとに目的と対象データを説明して別途同意を取得します。拒否しても閲覧や通常利用を妨げません。</p></section>`;
+  const body = `<nav><a href="/">災害板</a><a href="/about">この板について</a></nav><h1>利用規約・プライバシー・研究利用</h1><p class="lead">災害版の利用条件、情報の取扱い、研究利用を一つにまとめています。</p><p class="note">最終更新日：${updated}</p><nav class="legal-toc" aria-label="法務情報の目次"><a href="#terms">利用規約</a><a href="#privacy">プライバシー</a><a href="#research">研究利用</a></nav><section id="terms"><h2>利用規約</h2><p>災害情報の閲覧に同意を強制せず、投稿・通報の入口で利用条件を確認します。</p><p>災害版は見た時点の現地報告を扱う掲示板で、自治体、気象庁、消防、OpenNaviその他の公式発表や緊急通報の代わりではありません。投稿は未確認情報として扱われます。</p><p>氏名、電話番号、住所、現在地、待ち合わせ、病名などの個人情報、虚偽・なりすまし・差別・脅迫・救助を装う投稿、不正アクセスを禁止します。危険、個人情報、誤情報を含む投稿は非表示・削除することがあります。</p><p>外部サービスの運営者は災害版とは別です。安全確保のため投稿受付を変更・停止することがあります。本規約は日本法に準拠します。問い合わせはOpenNaviの<a href="${escapeHtml(officialVictimUrl(origin))}">お問い合わせ</a>から送信してください。</p></section><section id="privacy"><h2>プライバシーポリシー</h2><p>災害版運営が情報を取り扱います。自治体、社協、外部投稿サービス、OpenNaviとは別サービスです。運営者の正式な名称・住所は、本人からの請求に応じて遅滞なく開示します。</p><p>投稿・通報の本文、地域、時刻、同意した規約・ポリシーの版と日時、Turnstile検証結果、レート制限用のIP由来識別子、許可された解析情報を、投稿公開、確認、不正利用対策、問い合わせ対応、障害調査、安全な運用、サービス改善のために扱います。</p><h3>外部送信・委託</h3><div class="table-wrap"><table><thead><tr><th>送信先</th><th>送信情報</th><th>目的</th><th>保存・設定</th><th>停止・拒否</th></tr></thead><tbody><tr><th>災害版運営</th><td>現地報告・通報本文、地域、時刻、同意版・日時、Turnstile結果、IP由来識別子</td><td>投稿公開、通報対応、安全運用</td><td>Cloudflare基盤・運用ログ。目的に必要な期間だけ保存</td><td>投稿・通報を送信しない</td></tr><tr><th>Cloudflare, Inc.（Cloudflare）</th><td>IP、ブラウザ・通信メタデータ</td><td>ホスティング、配信、防御</td><td>Cloudflareの契約・ログ設定</td><td>各社設定に依存</td></tr><tr><th><a href="https://marketingplatform.google.com/about/analytics/terms/jp/" target="_blank" rel="noreferrer">Google LLC（Google Analytics）</a></th><td>許可後のページ閲覧、Cookie等の識別子</td><td>利用状況の把握と改善</td><td>同意後のみ。Google側の保持設定</td><td>同意バナーで拒否、Cookie削除</td></tr><tr><th>OpenNavi運営</th><td>災害版から公式ハブへ遷移した事実と通常のHTTPアクセス</td><td>公式情報への案内</td><td>OpenNavi側のポリシーに従う</td><td>遷移しない</td></tr></tbody></table></div><p>アクセス解析は初期状態で無効です。拒否しても閲覧を妨げません。各情報は利用目的に必要な期間だけ保存し、目的達成後または不要となった情報を削除・匿名化します。法令上保存が必要な情報は、その期間保持します。</p><p>個人情報の開示・訂正・削除・利用停止は、OpenNaviの<a href="${escapeHtml(officialVictimUrl(origin))}">お問い合わせ窓口</a>から請求してください。</p></section><section id="research"><h2>研究利用について</h2><p>研究・論文への利用は、サービス利用やアクセス解析とは別の任意同意です。この説明だけで包括的な研究同意を取得しません。</p><p>研究利用開始日は2026年8月16日（案件ごとの同意取得後）です。それ以前の投稿本文、Cloudflareアクセスログ、Google Analytics過去データ、Webhook・通報・確認履歴、IP由来識別子、その他の運用ログは研究利用へ転用しません。</p><p>研究案件ごとに対象、匿名化、公表範囲、保存期間、撤回方法を説明して同意を取得します。拒否しても閲覧や通常利用を妨げません。</p></section>`;
+  return page({ title: "利用規約・プライバシー・研究利用｜災害板", description: "災害版の利用規約、プライバシーポリシー、研究利用方針", canonical: `${site}/legal`, measurementId, body: `${body.replace(/<section id="research">[\s\S]*?<\/section>$/, researchSection).replace("統計情報と研究利用について", "統計情報の利用について")}${footer(origin, null)}` });
 }
 
 export function renderRobots(site: string): string {
@@ -551,7 +576,7 @@ export function renderRobots(site: string): string {
 }
 
 export function renderSitemap(site: string, slugs: string[]): string {
-  const urls = [`${site}/`, `${site}/about`, ...slugs.map((s) => `${site}/a/${s}`)];
+  const urls = [`${site}/`, `${site}/about`, `${site}/legal`, ...slugs.map((s) => `${site}/a/${s}`)];
   const body = urls
     .map((u) => `  <url><loc>${escapeHtml(u)}</loc></url>`)
     .join("\n");

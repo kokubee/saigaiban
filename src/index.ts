@@ -1,6 +1,7 @@
 import {
   renderAbout,
   renderHome,
+  renderLegal,
   renderNotFound,
   renderPlace,
   renderRobots,
@@ -49,6 +50,9 @@ export default {
       }
       if (path === "/health") {
         return json({ ok: true });
+      }
+      if (path === "/legal" || path === "/terms" || path === "/privacy" || path === "/research") {
+        return html(renderLegal(site, origin, path.slice(1) as "legal" | "terms" | "privacy" | "research", measurementId));
       }
       if (path === "/support" || path.startsWith("/support/tourism/")) {
         return Response.redirect(officialSupportUrl(origin), 302);
@@ -156,6 +160,9 @@ async function handlePost(
     return redirect(site, dest, "この接続では投稿を受け付けられません。");
   }
   const form = await request.formData();
+  if (form.get("legal_consent") !== "on") {
+    return redirect(site, dest, "利用規約とプライバシーポリシーへの同意が必要です。");
+  }
   if (!(await verifyTurnstile(form.get("cf-turnstile-response"), turnstileSecretKey, ip, {
     action: "report_submit",
     allowedHostnames: turnstileAllowedHostnames,
@@ -181,6 +188,9 @@ async function handlePost(
     ipHash: (await shortIpHmac(ip, env.RATE_LIMIT_HMAC_SECRET)) || "",
     role: decided.role,
     preferMaps: decided.preferMaps,
+    termsVersion: "2026-08-16",
+    privacyVersion: "2026-08-16",
+    consentedAt: new Date().toISOString(),
   });
   if (!saved.ok) return redirect(site, dest, saved.error);
   return Response.redirect(`${site}${dest}?ok=1`, 303);
@@ -206,9 +216,14 @@ async function handleFlag(request: Request, env: Env, site: string, reportId: st
   const token = await shortIpHmac(ip, env.RATE_LIMIT_HMAC_SECRET);
   if (!token) return back("通報受付の準備ができていません。");
   const form = await request.formData();
+  if (form.get("legal_consent") !== "on") return back("利用規約とプライバシーポリシーへの同意が必要です。");
   const reason = parseFlagReason(form.get("reason"));
   if (!reason) return back("通報理由を選んでください。");
-  const result = await flagReport(env.DB, reportId, reason, token);
+  const result = await flagReport(env.DB, reportId, reason, token, {
+    termsVersion: "2026-08-16",
+    privacyVersion: "2026-08-16",
+    consentedAt: new Date().toISOString(),
+  });
   return result.ok ? back() : back(result.error);
 }
 

@@ -354,7 +354,7 @@ test("successful report flag returns to the source page with a 303", async () =>
       };
     },
   } as unknown as D1Database;
-  const body = "reason=privacy";
+  const body = "reason=privacy&legal_consent=on";
   const response = await worker.fetch(
     new Request("https://saigaiban.com/api/reports/deadbeef-1234/flag", {
       method: "POST",
@@ -489,7 +489,7 @@ test("POST proceeds only for an allowed area when security gates are ready", asy
       };
     },
   };
-  const form = new URLSearchParams({ "cf-turnstile-response": "token-123", role: "visitor", verdict: "open" });
+  const form = new URLSearchParams({ "cf-turnstile-response": "token-123", role: "visitor", verdict: "open", legal_consent: "on" });
   try {
     const response = await worker.fetch(
       new Request("https://saigaiban.com/a/mobara/p/12345678", {
