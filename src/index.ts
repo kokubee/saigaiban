@@ -19,6 +19,7 @@ import {
 } from "./reports.ts";
 import { isShopLike } from "./labels.ts";
 import { publicPostingEnabled } from "./posting.ts";
+import { turnstileConfigured, verifyTurnstile } from "./turnstile.ts";
 import type { BoardPlace, Env } from "./types.ts";
 
 export default {
@@ -27,7 +28,9 @@ export default {
     const origin = opennaviOrigin(env.OPENNAVI_ORIGIN);
     const site = String(env.SITE_ORIGIN || "https://saigaiban.com").replace(/\/+$/, "");
     const measurementId = String(env.GA4_MEASUREMENT_ID || "").trim();
-    const postingEnabled = publicPostingEnabled(env.PUBLIC_POSTING_MODE);
+    const turnstileSiteKey = String(env.PUBLIC_TURNSTILE_SITE_KEY || "").trim();
+    const turnstileReady = turnstileConfigured(env.TURNSTILE_SECRET_KEY, turnstileSiteKey);
+    const postingEnabled = publicPostingEnabled(env.PUBLIC_POSTING_MODE) && turnstileReady;
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
     try {
@@ -67,11 +70,11 @@ export default {
         if (!place || place.area !== slug) return html(renderNotFound(site, measurementId), 404);
 
         if (request.method === "POST") {
-          return handlePost(request, env, site, slug, place, postingEnabled);
+          return handlePost(request, env, site, slug, place, postingEnabled, env.TURNSTILE_SECRET_KEY);
         }
         const notice = url.searchParams.get("ok") === "1" ? "受け取りました。公式ではありません。地図と公式ハブも見てください。" : url.searchParams.get("err");
         const reports = await listReports(env.DB, place.id);
-        return html(renderPlace(site, origin, meta, slug, place, reports, notice, measurementId, postingEnabled), 200, "private, no-store");
+        return html(renderPlace(site, origin, meta, slug, place, reports, notice, measurementId, postingEnabled, turnstileSiteKey), 200, "private, no-store");
       }
 
       const town = path.match(/^\/a\/([a-z0-9-]+)$/);
@@ -102,6 +105,7 @@ async function handlePost(
   slug: string,
   place: BoardPlace,
   postingEnabled: boolean,
+  turnstileSecretKey?: string,
 ): Promise<Response> {
   const dest = `/a/${slug}/p/${place.id}`;
   if (request.method !== "POST") return Response.redirect(`${site}${dest}`, 303);
@@ -112,6 +116,10 @@ async function handlePost(
     return redirect(site, dest, "この画面から送ってください。");
   }
   const form = await request.formData();
+  const ip = request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For") || "unknown";
+  if (!(await verifyTurnstile(form.get("cf-turnstile-response"), turnstileSecretKey, ip))) {
+    return redirect(site, dest, "確認に失敗しました。もう一度お試しください。");
+  }
   const decided = resolvePost({
     roleRaw: form.get("role"),
     verdictRaw: form.get("verdict"),
@@ -122,7 +130,6 @@ async function handlePost(
   if (decided.error) return redirect(site, dest, decided.error);
   const cleaned = cleanNote(form.get("note"));
   if (cleaned.error) return redirect(site, dest, cleaned.error);
-  const ip = request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For") || "unknown";
   const saved = await insertReport(env.DB, {
     placeId: place.id,
     area: slug,

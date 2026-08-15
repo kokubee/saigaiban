@@ -85,5 +85,9 @@ export type Env = {
   PUBLIC_READ_CACHE?: string;
   /** Public report intake: off (default) or on after P0 safety checks. */
   PUBLIC_POSTING_MODE?: string;
+  /** Cloudflare Turnstile site key (public); paired with the secret key. */
+  PUBLIC_TURNSTILE_SITE_KEY?: string;
+  /** Cloudflare Turnstile secret; configure as a Wrangler secret, never a public var. */
+  TURNSTILE_SECRET_KEY?: string;
   DB: D1Database;
 };

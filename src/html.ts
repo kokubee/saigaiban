@@ -248,6 +248,7 @@ export function renderPlace(
   notice: string | null,
   measurementId?: string | null,
   allowPosting = false,
+  turnstileSiteKey?: string | null,
 ): string {
   const area = meta.areas.find((a) => a.slug === slug);
   const nameJa = area?.nameJa || slug;
@@ -301,8 +302,9 @@ export function renderPlace(
         </select>
         <label for="note">短いメモ（任意・80字まで）</label>
         <textarea id="note" name="note" maxlength="80" placeholder="例: 15時ごろ、棚は少なかった"></textarea>
+        <div class="cf-turnstile" data-sitekey="${escapeHtml(turnstileSiteKey || "")}"></div>
         <button type="submit">投稿する</button>
-      </form>`
+      </form><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`
     : "";
   return page({
     title: `${place.name} — ${nameJa}の災害板`,

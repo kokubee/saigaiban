@@ -9,6 +9,7 @@ import { officialHubUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
 import { cleanNote, parseVerdict, resolvePost } from "../src/reports.ts";
 import { publicPostingEnabled, publicPostingMode } from "../src/posting.ts";
 import { sanitizeTelemetry, telemetryAllowlist } from "../src/telemetry.ts";
+import { turnstileConfigured, verifyTurnstile } from "../src/turnstile.ts";
 import worker from "../src/index.ts";
 import type { Env } from "../src/types.ts";
 
@@ -62,6 +63,27 @@ test("public posting is closed unless explicitly enabled", () => {
   assert.equal(publicPostingMode("unexpected"), "off");
   assert.equal(publicPostingEnabled(undefined), false);
   assert.equal(publicPostingEnabled("on"), true);
+});
+
+test("Turnstile must be configured and verified before intake can open", async () => {
+  assert.equal(turnstileConfigured("secret", ""), false);
+  assert.equal(turnstileConfigured("secret", "site-key-123456"), true);
+  assert.equal(await verifyTurnstile("", "secret"), false);
+  const originalFetch = globalThis.fetch;
+  let requestBody = "";
+  globalThis.fetch = async (_input, init) => {
+    requestBody = String(init?.body || "");
+    return new Response(JSON.stringify({ success: true }), { status: 200 });
+  };
+  try {
+    assert.equal(await verifyTurnstile("token-123", "secret", "192.0.2.1"), true);
+    const body = new URLSearchParams(requestBody);
+    assert.equal(body.get("secret"), "secret");
+    assert.equal(body.get("response"), "token-123");
+    assert.equal(body.get("remoteip"), "192.0.2.1");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("place page hides the report form while public posting is closed", () => {
