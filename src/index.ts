@@ -88,7 +88,11 @@ export default {
         if (request.method === "POST") {
           return handlePost(request, env, site, slug, place, postingEnabled, env.TURNSTILE_SECRET_KEY, turnstileAllowedHostnames);
         }
-        const notice = url.searchParams.get("ok") === "1" ? "受け取りました。公式ではありません。地図と公式ハブも見てください。" : url.searchParams.get("err");
+        const notice = url.searchParams.get("ok") === "1"
+          ? "受け取りました。公式ではありません。地図と公式ハブも見てください。"
+          : url.searchParams.get("flag") === "1"
+            ? "通報を受け付けました。内容を確認します。"
+            : url.searchParams.get("err");
         const reports = await listReports(env.DB, place.id);
         return html(renderPlace(site, origin, meta, slug, place, reports, notice, measurementId, postingEnabled, turnstileSiteKey, reportingEnabled), 200, "private, no-store");
       }
