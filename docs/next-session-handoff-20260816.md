@@ -1,10 +1,10 @@
 # 災害版 次回引き継ぎメモ
 
-確認日: 2026-08-16  
+確認日: 2026-08-17
 対象: `/Users/kokubee/code2026/saigaiban`  
 本番: https://saigaiban.com  
-本番Worker version: `13a58024-fa90-4482-9c47-4ad77d46dfe4`  
-ローカル基準コミット: `6138b69 chore: update disaster board legal disclosure`
+本番Worker version: `2cf446a5-d9b3-4e7b-9adc-ba930213e231`
+ローカル基準コミット: `6187120 feat: enable curated support event catalog`
 
 ## 現在の判定
 
@@ -27,6 +27,7 @@
 - 投稿受付OFF時は、外部取得やD1書き込みより前に拒否
 - Turnstile、HMACレート制限、通報・非表示・管理確認のfail-closed実装
 - OpenNavi依存fetchのtimeout、不正レスポンス時のフォールバック、shadow cache基盤
+- 支援イベントの読み取り専用カタログを本番で有効化（`PUBLIC_SUPPORT_EVENTS_MODE=on`）
 - 本番テスト: 38件通過、型チェック通過
 
 ## 最優先の残作業: 物資配布・炊き出し等の支援イベント
@@ -50,7 +51,9 @@ status / checkedAt / freshness / contactNote
 
 表示状態は少なくとも `予定`、`受付中`、`終了`、`要確認` を分ける。公式URLと確認日時がないSNS発見情報は、自動で公開状態にしない。住民報告は公式情報へ昇格させず、補足として別表示する。
 
-読み取り専用の契約・表示・鮮度検証と `migrations/0005_support_events.sql` は実装済み。ただし、公式ソースのデータ投入・D1 migration適用・`PUBLIC_SUPPORT_EVENTS_MODE=on` への切替は未実施で、現在はOFFのまま。実イベントを創作せず、一次ソース確認後に公開する。
+読み取り専用の契約・表示・鮮度検証と `migrations/0005_support_events.sql` は実装済み。D1 migration適用と `PUBLIC_SUPPORT_EVENTS_MODE=on` への切替も完了している。本番の `support_events` は現在0件（公開0件）。一次ソースで現在受付中の被災者向けイベントを確認できていないため、実イベントを創作せず空欄のままにしている。
+
+2026-08-17時点で確認できた千葉県公式の「はじめての災害ボランティア」は8月8日開催分で、受付終了済みの研修であり、現在の被災者向け支援イベントとしては登録しない。自治体・社協の現行告知で、物資配布、炊き出し、医療、入浴の日時付き情報が確認できた時点で、対象市区町村・公式URL・確認時刻を揃えて公開する。
 
 ## 次に整える課題
 
@@ -108,13 +111,11 @@ status / checkedAt / freshness / contactNote
 
 ## 次回の着手順
 
-1. 支援イベントの一次ソース・正本・状態値を承認
-2. 読み取り専用のイベント型とfixtureを追加
-3. 市区町村ページのカテゴリ導線とイベントカードを実装
-4. freshness・公式URL・0件・障害時のテストを追加
-5. Android/iPhone幅で実機確認
-6. 本番は投稿OFFのまま段階デプロイし、リンク検査
+1. 支援イベントの一次ソースに現行の日時付き情報が出たら、DB投入SQLをレビューする
+2. DB投入後に `published=1` の表示、鮮度、公式リンクを確認する
+3. Android/iPhone幅で地域→イベント→公式リンクを実機確認
+4. 終了・鮮度切れイベントを非公開または要確認へ更新する
 
 ## 同期状態
 
-この確認時点で災害版のlocal `main` は `origin/main`・`nas/main` より1コミット先行している。今回のリーガル更新コミットはローカルに記録済みだが、リモートpushは未実施。次回はpush前に差分とリモート先を再確認する。
+この確認時点で災害版のlocal `main` は `origin/main`・`nas/main` と同期済み。支援イベントの公開モード変更は `6187120` に含まれ、本番Workerにも反映済み。D1のカタログは空で、公式情報が確認できるまで追加登録しない。
