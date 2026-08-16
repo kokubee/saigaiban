@@ -1,10 +1,12 @@
 import { CATEGORY_FILTERS, categoryDescription, categoryLabel, isShelter, isShopLike, isKnownCategory, prefName } from "./labels.ts";
 import { googleMapsSearchUrl } from "./maps.ts";
-import { officialHubUrl, officialSupportUrl, officialVictimUrl } from "./opennavi.ts";
+import { KUMAMOTO_RESIDENT_SUPPORT, officialHubUrl, officialSupportUrl, officialVictimUrl } from "./opennavi.ts";
 import { evidenceLabel } from "./evidence.ts";
 import { VERDICT_LABEL, VISITOR_VERDICTS, formatWhen } from "./reports.ts";
+import { supportEventCategoryLabel, supportEventFreshnessLabel, supportEventStatusLabel } from "./support-events.ts";
 import { tourismAreaConfig } from "./tourism-areas.ts";
-import type { BoardMeta, BoardPlace, PlaceSummary, Report, TourismFetchResult } from "./types.ts";
+import type { BoardMeta, BoardPlace, PlaceSummary, Report, SupportEventQueryResult, TourismFetchResult } from "./types.ts";
+import { HANDOFF_SCHEMA, OPENNAVI_HANDOFF_PROFILE, OPENNAVI_PROTOCOL_NAME, OPENNAVI_PROTOCOL_VERSION, handoffApiUrl, legacyHandoffApiUrl } from "./protocol.ts";
 
 export function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -15,8 +17,13 @@ export function escapeHtml(value: unknown): string {
     .replace(/'/g, "&#39;");
 }
 
+function jsonForHtml(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026");
+}
+
 const CSS = `
 :root{
+  color-scheme:light;
   --bg:#eef7fb;
   --ink:#173247;
   --muted:#5c7180;
@@ -106,9 +113,15 @@ nav a{margin-right:0}
 @media(min-width:720px){.support-grid{grid-template-columns:1fr 1fr}}
 .support-card{background:linear-gradient(145deg,#fff 0%,#eef8ff 100%);border:1px solid #bcdce9;border-radius:18px;padding:18px;box-shadow:var(--shadow)}
 .support-card h2,.support-card h3{margin-top:0}
-.caution{background:#fff3d6;border-left:4px solid #9c621c;padding:10px 12px;margin:14px 0}
-.provider-links{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
-.provider-links a{display:inline-block;border:1px solid var(--accent);border-radius:8px;padding:7px 11px;text-decoration:none}
+.event-list{display:grid;gap:12px}
+.event-card{background:#fff;border:1px solid var(--line);border-left:6px solid #e4ad3a;border-radius:14px;padding:14px 16px;box-shadow:0 10px 26px rgb(44 84 100 / 8%)}
+.event-card h3{margin:0 0 5px;font-size:1.03rem}
+.event-meta{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0;color:var(--muted);font-size:.88rem}
+.event-meta .tag{margin:0}
+.caution{background:var(--sun);border:1px solid #efd896;border-left:5px solid #d29b23;padding:12px 14px;margin:16px 0;border-radius:12px;color:#664b16}
+.provider-links{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}
+.provider-links a{display:inline-block;border:1px solid var(--accent);border-radius:12px;padding:9px 12px;text-decoration:none;background:#fff;color:var(--accent);font-weight:700}
+.provider-links a:hover{background:var(--accent);color:#fff}
 .stay{display:grid;grid-template-columns:96px 1fr;gap:12px}
 .stay img{width:96px;height:72px;object-fit:cover;border-radius:10px;background:#e9f2f7}
 .stay h3{margin:0 0 3px}
@@ -125,17 +138,6 @@ nav a{margin-right:0}
   .town-tools{animation-delay:.12s}
   .cards .card{animation:soft-rise .5s cubic-bezier(.16,1,.3,1) both}
   .cards .card:nth-child(2){animation-delay:.04s}.cards .card:nth-child(3){animation-delay:.08s}.cards .card:nth-child(4){animation-delay:.12s}
-}
-@media (prefers-color-scheme:dark){
-  :root{--bg:#102936;--ink:#e6f3f7;--muted:#a6c0ca;--card:#173846;--line:#2b596b;--paper:#163441;--accent:#78d2c5;--accent-strong:#9ce6da;--mint:#1b4a45;--sky:#1b4660;--sun:#51431d;--coral:#5a342e;--lavender:#37385c;--shadow:0 18px 42px rgb(0 0 0 / 20%)}
-  html,body{background:var(--bg);color:var(--ink)}
-  .banner{background:linear-gradient(90deg,#123e50,#145a64,#236d6b);color:#f1ffff}
-  .wrap>nav:first-child{background:rgb(19 52 65 / 82%);border-color:#2c5a6c}.wrap>nav:first-child a{color:var(--ink)}.wrap>nav:first-child a:first-child{background:#3aa89b;color:#082b33}.wrap>nav:first-child a:hover{background:#204c60}.wrap>nav:first-child a:first-child:hover{background:#7fe1d1;color:#082b33}
-  .wrap>h1{color:#dff8f7}.lead,label{color:#c8e5ea}
-  button{color:#082b33}
-  .card,.support-card,.event-card,.town-tools,.provider-links a,.analytics-consent{background:#173846;color:var(--ink)}
-  .card:nth-child(4n+2){background:linear-gradient(145deg,#173846,#3e2c35)}.card:nth-child(4n+3){background:linear-gradient(145deg,#173846,#3f3822)}.card:nth-child(4n+4){background:linear-gradient(145deg,#173846,#2d2d53)}
-  .town-tools{background:linear-gradient(135deg,#173846 0%,#1b4a4c 58%,#51431d 100%);border-color:#376c73}.search-form input,select,textarea{background:#102f3b;color:var(--ink)}.tag{background:#5a4a1f;border-color:#7b6a31;color:#ffe9a3}.caution{color:#ffe8ab}.foot{color:var(--muted)}
 }
 @media(max-width:719px){
   .wrap{padding:18px 14px 56px}
@@ -180,6 +182,7 @@ function page(opts: {
   body: string;
   measurementId?: string | null;
 }): string {
+  const site = new URL(opts.canonical).origin;
   return `<!doctype html>
 <html lang="ja">
 <head>
@@ -188,6 +191,22 @@ function page(opts: {
 <title>${escapeHtml(opts.title)}</title>
 <meta name="description" content="${escapeHtml(opts.description)}">
 <link rel="canonical" href="${escapeHtml(opts.canonical)}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="災害板">
+<meta property="og:title" content="${escapeHtml(opts.title)}">
+<meta property="og:description" content="${escapeHtml(opts.description)}">
+<meta property="og:url" content="${escapeHtml(opts.canonical)}">
+<meta property="og:locale" content="ja_JP">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="${escapeHtml(opts.title)}">
+<meta name="twitter:description" content="${escapeHtml(opts.description)}">
+<script type="application/ld+json">${jsonForHtml({
+    "@context": "https://schema.org",
+    "@graph": [
+      { "@type": "WebSite", "@id": `${site}/#website`, name: "災害板", url: `${site}/`, inLanguage: "ja" },
+      { "@type": "WebPage", "@id": `${opts.canonical}#webpage`, url: opts.canonical, name: opts.title, description: opts.description, inLanguage: "ja", isPartOf: { "@id": `${site}/#website` } },
+    ],
+  })}</script>
 <style>${CSS}</style>
 ${gaSnippet(opts.measurementId)}</head>
 <body>
@@ -245,6 +264,14 @@ export function renderHome(
       <h1>災害板</h1>
       <p class="lead">${escapeHtml(meta.disaster.label)}について、場所ごとの「いまどうか」を書く板です。匿名の雑談スレではありません。</p>
       <p class="note">まず都道府県と市区町村を選びます。場所一覧と投稿は市区町村ページを開いた時だけ読み込みます。自治体・インフラの公式情報は <a href="${escapeHtml(victimUrl)}">OpenNaviの被災者向け入口</a> へ。</p>
+      <section class="support-card external-entry" aria-labelledby="kumamoto-entry-title">
+        <h2 id="kumamoto-entry-title">熊本の情報・支援先</h2>
+        <p>熊本の被災者向け情報は専用ナビに集約しています。支援する方はOpenNaviの支援先ページから熊本を選んでください。</p>
+        <div class="provider-links">
+          <a href="${KUMAMOTO_RESIDENT_SUPPORT}" target="_blank" rel="noreferrer"><strong>くまもと被災者支援ナビ ↗</strong><span>給水・支援金・り災証明など</span></a>
+          <a href="${escapeHtml(officialSupportUrl(origin))}?destination=kumamoto"><strong>熊本を外から支援する ↗</strong><span>公式支援・寄付・買って支援・旅して支援</span></a>
+        </div>
+      </section>
       ${tabs}
       ${towns}
       ${footer(origin, meta)}
@@ -264,6 +291,7 @@ export function renderTown(
   allowPosting = false,
   selectedCategory?: string,
   searchQuery?: string,
+  supportEvents: SupportEventQueryResult = { available: false, events: [] },
 ): string {
   const area = meta.areas.find((a) => a.slug === slug);
   if (!area) return renderNotFound(site, measurementId);
@@ -328,10 +356,54 @@ export function renderTown(
       <h1>${escapeHtml(area.nameJa)}の災害板</h1>
       <p class="lead">${allowPosting ? "場所の正体に、「いまどうだったか」を書けます。" : "場所ごとのこれまでの報告を確認できます。"} 投稿は見た時点の話で、公式ではありません。店の営業は地図、避難所の開設は公式ハブで確認してください。</p>
       ${tools}
+      ${renderSupportEvents(origin, area.nameJa, supportEvents)}
       ${sections || `<p class="note">条件に合う場所がありません。カテゴリを戻すか、検索語を短くしてみてください。</p>`}
       ${footer(origin, meta, slug)}
     `,
   });
+}
+
+function renderSupportEvents(origin: string, areaName: string, result: SupportEventQueryResult): string {
+  if (!result.available) return "";
+  const official = officialSupportUrl(origin);
+  if (!result.events.length) {
+    return `<section class="support-card" aria-labelledby="support-events-title">
+      <h2 id="support-events-title">${escapeHtml(areaName)}の支援イベント</h2>
+      <p class="note">この板で確認できる物資配布・炊き出し等はまだありません。最新の公式情報は <a href="${escapeHtml(official)}">OpenNaviの支援ページ</a> で確認してください。</p>
+    </section>`;
+  }
+  const cards = result.events.map((event) => {
+    const address = event.address ? `<br><span class="note">${escapeHtml(event.address)}</span>` : "";
+    const eligibility = event.eligibility ? `<p><strong>対象:</strong> ${escapeHtml(event.eligibility)}</p>` : "";
+    const description = event.description ? `<p>${escapeHtml(event.description)}</p>` : "";
+    const contact = event.contactNote ? `<p class="note">${escapeHtml(event.contactNote)}</p>` : "";
+    const freshness = supportEventFreshnessLabel(event.freshness);
+    const mapsUrl = googleMapsSearchUrl(event.venue, areaName, event.address);
+    return `<article class="event-card">
+      <h3><span class="tag">${escapeHtml(supportEventStatusLabel(event.status))}</span>${escapeHtml(event.title)}</h3>
+      <div class="event-meta"><span>${escapeHtml(supportEventCategoryLabel(event.category))}</span><span>確認: ${escapeHtml(formatEventDate(event.checkedAt))}・${escapeHtml(freshness)}</span></div>
+      <p><strong>日時:</strong> ${escapeHtml(formatEventRange(event.startsAt, event.endsAt))}</p>
+      <p><strong>会場:</strong> ${escapeHtml(event.venue)}${address ? `<br>${address}` : ""}</p>
+      <p><strong>主催:</strong> ${escapeHtml(event.organizer)}</p>
+      ${eligibility}${description}${contact}
+      <p>${mapsUrl ? `<a href="${escapeHtml(mapsUrl)}" rel="noopener">会場をGoogleマップで確認</a> ・ ` : ""}<a href="${escapeHtml(event.sourceUrl)}" rel="noopener">掲載元の公式ページを確認する</a></p>
+    </article>`;
+  }).join("");
+  return `<section class="support-card" aria-labelledby="support-events-title">
+    <h2 id="support-events-title">${escapeHtml(areaName)}の支援イベント</h2>
+    <p class="note">日時・会場・受付状態は掲載元の公式ページで必ず確認してください。災害板は受付や予約を行いません。</p>
+    <div class="event-list">${cards}</div>
+  </section>`;
+}
+
+function formatEventDate(iso: string): string {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return "不明";
+  return new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(ms));
+}
+
+function formatEventRange(startsAt: string, endsAt: string): string {
+  return `${formatEventDate(startsAt)}〜${formatEventDate(endsAt)}`;
 }
 
 function renderCard(slug: string, areaName: string, place: BoardPlace, summary?: PlaceSummary, allowPosting = false): string {
@@ -495,21 +567,25 @@ export function renderAbout(site: string, origin: string, measurementId?: string
   const victimUrl = officialVictimUrl(origin);
   return page({
     title: "この板について — 災害板",
-    description: "災害版は有事の被災地で使う、場所ごとの現地報告板です。公式情報と支援者向けの案内はOpenNaviへ。",
+    description: "災害板は、平時から場所マスターを準備し、災害時にすぐ使えるようにしておく掲示板です。現地サイトの開設後は、そちらへ引き継ぎます。",
     canonical: `${site}/about`,
     measurementId,
     body: `
-      <nav><a href="/">災害板</a><a href="${escapeHtml(victimUrl)}">OpenNavi（被災者向け）</a></nav>
+      <nav><a href="/">災害板</a><a href="/protocol/opennavi/v1">OpenNavi Protocol</a><a href="${escapeHtml(victimUrl)}">OpenNavi（被災者向け）</a></nav>
       <h1>この板について</h1>
-      <p class="lead">災害版は、被災地で場所を探し、見た時の「いまどうか」を共有するための板です。自治体・社協などの公式発表や支援窓口の代わりにはなりません。</p>
+      <p class="lead">災害板は、OpenNaviが持つ場所マスターを平時から受け取り、災害が起きた地域ですぐ開けるよう準備している災害時の入口です。現地の公式サイトや専用サイトが立ち上がったら、最新情報の正本をそちらへ引き継ぎます。自治体・社協などの公式発表や支援窓口の代わりにはなりません。</p>
+      <h2>平時から準備していること</h2>
+      <p>OpenNaviの場所マスター（名前・位置・種別）をもとに、市区町村ごとの場所カードをいつでも開ける形に保ちます。災害が起きる前から、場所の正体を整えておくことで、発災時にゼロから台帳を作らずに済むようにします。</p>
+      <h2>災害が起きたとき</h2>
+      <p>対象地域の場所カードをすぐ表示し、公開済みの現地報告を場所ごとに確認できるようにします。カードは最初から未確認です。投稿は見た時点の補足であり、営業中・開設中・安全を保証するものではありません。</p>
+      <h2>現地サイトへの引き継ぎ</h2>
+      <p>自治体や地域の運営者による現地サイトが立ち上がったら、最新情報の正本と公式案内は現地サイトへ移します。災害板は場所マスターと公開済みの補足を読み取り専用のOpenNavi Protocol API（<code>/api/opennavi/v1/handoff/{area-slug}</code>）で渡し、現地サイト側の案内を優先する役割に切り替えます。受け渡し手順は<a href="/protocol/opennavi/v1">OpenNavi Protocol v1の仕様書</a>で確認できます。</p>
       <h2>OpenNaviとの使い分け</h2>
       <ul>
         <li>被災地で場所を探す、見た様子を書く → この災害版</li>
         <li>公式発表を確認する → <a href="${escapeHtml(victimUrl)}">OpenNaviの被災者向け入口</a></li>
       </ul>
-      <h2>すること</h2>
-      <p>OpenNavi が開いた町について、店や避難所などの場所カードを自動で立てます。最初は未確認です。見かけた人も、店の人も書けます。店側は Google マップの営業情報へ寄せることもできます。どれも公式確認ではありません。</p>
-      <h2>しないこと</h2>
+      <h2>災害板がしないこと</h2>
       <ul>
         <li>公式窓口の代わりにはならない</li>
         <li>支援者向けの公式情報・義援金・物資・災害ボランティア案内をここでまとめない</li>
@@ -519,6 +595,55 @@ export function renderAbout(site: string, origin: string, measurementId?: string
       </ul>
       <h2>公式ハブとの関係</h2>
       <p>場所の名前と位置は <a href="${escapeHtml(victimUrl)}">OpenNaviの被災者向け入口</a> の台帳から受け取り、災害版の報告は現地の補足として扱います。被災地の外から支援する案内は <a href="${escapeHtml(officialSupportUrl(origin))}">OpenNaviの公式支援ページ</a> を見てください。災害版の支援URLはOpenNaviへ案内します。</p>
+      ${footer(origin, null)}
+    `,
+  });
+}
+
+export function renderProtocol(site: string, origin: string, measurementId?: string | null): string {
+  const normalizedSite = site.replace(/\/+$/, "");
+  const discoveryUrl = `${normalizedSite}/.well-known/opennavi.json`;
+  const handoffUrl = handoffApiUrl(normalizedSite);
+  const legacyUrl = legacyHandoffApiUrl(normalizedSite);
+  return page({
+    title: "OpenNavi Protocol v1 — 災害板",
+    description: "災害板から現地サイトへ場所マスターと公開済みの最新補足を引き継ぐための仕様です。",
+    canonical: `${normalizedSite}/protocol/opennavi/v1`,
+    measurementId,
+    body: `
+      <nav><a href="/">災害板</a><a href="/about">この板について</a><a href="${escapeHtml(discoveryUrl)}">機械向け発見情報</a></nav>
+      <h1>${OPENNAVI_PROTOCOL_NAME} v${escapeHtml(OPENNAVI_PROTOCOL_VERSION)}</h1>
+      <p class="lead">災害板が平時から準備している場所マスターを、自治体や地域運営者の現地サイトへ安全に引き継ぐための公開仕様です。</p>
+      <section class="support-card">
+        <h2>現地サイト運営者の手順</h2>
+        <ol>
+          <li><a href="${escapeHtml(discoveryUrl)}"><code>${escapeHtml(discoveryUrl)}</code></a>を取得し、対応プロファイルを確認します。</li>
+          <li>正規API <code>${escapeHtml(handoffUrl)}</code> に地域slugを入れてGETします。</li>
+          <li><code>pagination.nextCursor</code> がある間は、<code>?cursor=...</code>で続きのページを取得します。</li>
+          <li><code>handoff.phase</code>と<code>handoff.next</code>を保存し、現地サイトが立ち上がったら現地サイトを正本にします。</li>
+        </ol>
+      </section>
+      <h2>引き継がれる情報</h2>
+      <ul>
+        <li>場所ID、名前、市区町村、カテゴリ</li>
+        <li>公開された位置、住所、出典、データ基準日</li>
+        <li>公開済みで非表示になっていない最新報告と報告件数</li>
+      </ul>
+      <h2>引き継がれない情報</h2>
+      <ul>
+        <li>電話番号、個人名、待ち合わせ、連絡先</li>
+        <li>非表示報告、管理者用ID、レビュー内部値</li>
+        <li>座標入りの地図URLや、OpenNavi・災害板の内部フィールド</li>
+      </ul>
+      <h2>正本の扱い</h2>
+      <p>現在の災害板は<code>prepared</code>フェーズです。<code>handoff.next</code>は<code>local-site</code>を示します。現地サイトが立ち上がった後は、自治体・事業者・社協などの一次情報と現地サイトの案内を正本として扱い、災害板の住民報告を公式情報へ昇格させません。</p>
+      <h2>エンドポイント</h2>
+      <ul>
+        <li>正規: <a href="${escapeHtml(handoffUrl)}"><code>${escapeHtml(handoffUrl)}</code></a></li>
+        <li>互換: <a href="${escapeHtml(legacyUrl)}"><code>${escapeHtml(legacyUrl)}</code></a></li>
+        <li>上流の場所マスター: <a href="${escapeHtml(`${origin.replace(/\/+$/, "")}/api/board/places`)}"><code>${escapeHtml(`${origin.replace(/\/+$/, "")}/api/board/places`)}</code></a></li>
+      </ul>
+      <p class="note">プロファイル: <code>${OPENNAVI_HANDOFF_PROFILE}</code> ／ レスポンススキーマ: <code>${HANDOFF_SCHEMA}</code> ／ GET・OPTIONS・CORS対応、書き込みなし。</p>
       ${footer(origin, null)}
     `,
   });
@@ -646,7 +771,45 @@ export function renderLegal(
 }
 
 export function renderRobots(site: string): string {
-  return `User-agent: *\nAllow: /\nSitemap: ${site}/sitemap.xml\n`;
+  return `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /health\nSitemap: ${site}/sitemap.xml\n`;
+}
+
+export function renderLlms(site: string, origin: string): string {
+  return `# 災害板
+
+> 災害時に、OpenNaviの場所台帳をもとに市区町村ごとの場所カードと、見た時点の現地報告を表示する掲示板です。
+
+災害板は自治体・気象庁・消防・事業者の公式発表、緊急通報、避難所の開設判断、寄付や予約の受付を代替しません。カードや投稿は公式確認ではなく、最新状況は一次情報で確認してください。
+
+## 公開していること
+- 市区町村ごとの場所カードと、場所に紐づく現地報告
+- 未確認、住民報告、店側の自己申告、古い可能性の区別
+- 掲載元の公式URLと確認日時がある支援イベント（公開設定時）
+- OpenNaviの被災者向け公式ハブへの導線
+- 利用規約・プライバシーポリシー・統計情報の利用方針
+
+## しないこと
+- 支援者向けの義援金、支援物資、災害ボランティアの公式一覧を災害板で管理しない（OpenNaviへ案内する）
+- 被災者向けの日時付き支援イベントも、掲載元の公式URLと確認日時があるものだけを表示する
+- 地域全体の停電・断水を場所報告へ混在させない
+- 人探し、個人宅への直接支援、住所・電話・待ち合わせの仲介をしない
+- 未確認のSNS投稿を公式情報として掲載しない
+
+## 主要ページ
+- ${site}/ — 都道府県・市区町村の入口
+- ${site}/about — 災害版とOpenNaviの役割分担
+- ${site}/protocol/opennavi/v1 — 現地サイト運営者向けOpenNavi Protocol仕様
+- ${site}/legal — 利用規約・プライバシー・統計情報の利用方針
+- ${site}/robots.txt — クロール方針
+- ${site}/sitemap.xml — 公開ページ一覧
+- ${site}/.well-known/opennavi.json — OpenNavi Protocolの対応情報
+- ${site}/api/opennavi/v1/handoff/{area-slug} — 現地サイトへ引き継ぐための公開読み取りAPI（続きは?cursor=...）
+- ${origin}/ — OpenNaviの被災者向け公式ハブ
+- ${origin}/support — 支援者向け公式情報
+
+## データの扱い
+場所の正体はOpenNaviの公開APIから読み込みます。現地サイトが立ち上がったら、そちらを正本として扱ってください。投稿が存在しても、営業中・開設中・安全を保証するものではありません。災害版の公開情報は、取得時点と投稿時点を基準に扱います。
+`;
 }
 
 export function renderSitemap(site: string, slugs: string[]): string {

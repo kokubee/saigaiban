@@ -79,6 +79,34 @@ export type TourismFetchResult = {
   creditHtml: string;
 };
 
+export type SupportEventCategory = "supplies" | "meal" | "medical" | "bath" | "collection";
+export type SupportEventStatus = "scheduled" | "open" | "ended" | "check";
+export type SupportEventFreshness = "fresh" | "stale" | "expired" | "unknown";
+
+export type SupportEvent = {
+  id: string;
+  area: string;
+  category: SupportEventCategory;
+  title: string;
+  organizer: string;
+  venue: string;
+  address: string | null;
+  startsAt: string;
+  endsAt: string;
+  eligibility: string | null;
+  description: string | null;
+  sourceUrl: string;
+  status: SupportEventStatus;
+  checkedAt: string;
+  freshness: SupportEventFreshness;
+  contactNote: string | null;
+};
+
+export type SupportEventQueryResult = {
+  available: boolean;
+  events: SupportEvent[];
+};
+
 export type Env = {
   OPENNAVI_ORIGIN: string;
   SITE_ORIGIN: string;
@@ -101,5 +129,7 @@ export type Env = {
   RATE_LIMIT_HMAC_SECRET?: string;
   /** Admin token for moderation API; configure as a Wrangler secret. */
   MODERATION_ADMIN_TOKEN?: string;
+  /** Curated support-event catalog is opt-in and remains off until its migration and data review are complete. */
+  PUBLIC_SUPPORT_EVENTS_MODE?: string;
   DB: D1Database;
 };

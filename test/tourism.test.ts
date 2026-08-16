@@ -11,6 +11,7 @@ import {
   readRakutenCredentials,
 } from "../src/tourism.ts";
 import { jalanSearchUrl, tourismAreaConfig } from "../src/tourism-areas.ts";
+import { kumamotoResidentSupportUrl } from "../src/opennavi.ts";
 import type { BoardMeta, TourismFetchResult } from "../src/types.ts";
 
 const META: BoardMeta = {
@@ -134,6 +135,10 @@ test("support page delegates official disaster support to OpenNavi and separates
   assert.match(html, /避難先の案内ではありません/);
   assert.match(html, /泊まって地域を応援/);
   assert.doesNotMatch(html, /unknown.*泊まって応援/);
+});
+
+test("Kumamoto resident support is consolidated at the dedicated navigator", () => {
+  assert.equal(kumamotoResidentSupportUrl(), "https://kumamoto-shien.jp/");
 });
 
 test("tourism page escapes provider content and includes exact credits", () => {

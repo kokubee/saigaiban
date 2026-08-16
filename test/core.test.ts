@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getCachedJson, publicCacheMode } from "../src/cache.ts";
 import { evidenceLabel, freshnessFor, reportEvidence } from "../src/evidence.ts";
-import { activityWindowLabel, escapeHtml, gaSnippet, renderHome, renderPlace, renderTown } from "../src/html.ts";
+import { activityWindowLabel, escapeHtml, gaSnippet, renderHome, renderLlms, renderPlace, renderRobots, renderTown } from "../src/html.ts";
 import { categoryDescription, categoryLabel, isShelter, normalizePlaceCategory } from "../src/labels.ts";
 import { googleMapsSearchUrl } from "../src/maps.ts";
 import { officialHubUrl, officialVictimUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
@@ -12,6 +12,7 @@ import { purgeExpiredIpHashes, rateLimitConfigured, shortIpHmac } from "../src/r
 import { reportRequestHeadersAllowed } from "../src/request.ts";
 import { sanitizeTelemetry, telemetryAllowlist } from "../src/telemetry.ts";
 import { turnstileConfigured, turnstileHostnames, verifyTurnstile } from "../src/turnstile.ts";
+import { listSupportEvents, parseSupportEvent, publicSupportEventsEnabled, supportEventFreshness } from "../src/support-events.ts";
 import worker from "../src/index.ts";
 import type { Env } from "../src/types.ts";
 
@@ -529,6 +530,18 @@ test("official hub URL uses the town slug", () => {
   assert.equal(officialVictimUrl("https://opennavi.org", "mobara"), "https://opennavi.org/a/mobara");
 });
 
+test("legacy Kumamoto entries redirect to the consolidated resident navigator", async () => {
+  const env = {
+    OPENNAVI_ORIGIN: "https://opennavi.org",
+    SITE_ORIGIN: "https://saigaiban.com",
+  } as unknown as Env;
+  for (const path of ["/support?destination=kumamoto", "/support?pref=43", "/?pref=43"]) {
+    const response = await worker.fetch(new Request(`https://saigaiban.com${path}`), env);
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get("location"), "https://kumamoto-shien.jp/");
+  }
+});
+
 test("Google Maps links search by place name and municipality, never coordinates", () => {
   const url = googleMapsSearchUrl("イオン大網白里店", "大網白里市", "千葉県大網白里市みやこ野1-1");
   assert.match(url, /google\.com\/maps\/search\/\?api=1&query=/);
@@ -596,10 +609,94 @@ test("home page head includes GA4 when configured", () => {
   );
   assert.match(html, /id=G-4KQPS1LRHV/);
   assert.match(html, /gtag\('config', 'G-4KQPS1LRHV'\)/);
+  assert.match(html, /https:\/\/kumamoto-shien\.jp\//);
+  assert.match(html, /\/support\?destination=kumamoto/);
   assert.equal(renderHome("https://saigaiban.com", "https://opennavi.org", {
     disaster: { id: "r8-chiba-heavy-rain", label: "令和8年千葉県豪雨" },
     areas: [],
   }).includes("googletagmanager"), false);
+});
+
+test("public SEO assets describe the resident board without exposing APIs", () => {
+  const html = renderHome("https://saigaiban.com", "https://opennavi.org", {
+    disaster: { id: "r8-chiba-heavy-rain", label: "令和8年千葉県豪雨" },
+    areas: [],
+  });
+  assert.match(html, /property="og:type" content="website"/);
+  assert.match(html, /property="og:locale" content="ja_JP"/);
+  assert.match(html, /name="twitter:card" content="summary"/);
+  const json = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)?.[1];
+  assert.ok(json);
+  assert.equal(JSON.parse(json)["@graph"][0]["@type"], "WebSite");
+  assert.match(renderRobots("https://saigaiban.com"), /Disallow: \/api\//);
+  assert.match(renderRobots("https://saigaiban.com"), /Disallow: \/health/);
+  const llms = renderLlms("https://saigaiban.com", "https://opennavi.org");
+  assert.match(llms, /場所カード/);
+  assert.match(llms, /公式発表/);
+  assert.match(llms, /https:\/\/saigaiban\.com\/legal/);
+});
+
+test("support events require an HTTPS source and stale entries become review-only", async () => {
+  const now = Date.parse("2026-08-16T00:00:00Z");
+  const rawEvent = {
+    id: "meal-mobara-1",
+    area: "mobara",
+    category: "meal",
+    title: "炊き出し",
+    organizer: "公式団体",
+    venue: "市民会館",
+    address: "千葉県茂原市",
+    starts_at: "2026-08-16T01:00:00Z",
+    ends_at: "2026-08-16T04:00:00Z",
+    source_url: "https://example.jp/events/1",
+    status: "open",
+    checked_at: "2026-08-14T23:00:00Z",
+  };
+  const event = parseSupportEvent(rawEvent, now);
+  assert.ok(event);
+  assert.equal(event.status, "check");
+  assert.equal(event.freshness, "stale");
+  assert.equal(supportEventFreshness("2026-08-15T12:00:00Z", now), "fresh");
+  assert.equal(parseSupportEvent({ ...rawEvent, starts_at: "2026-08-17T01:00:00Z", ends_at: "2026-08-17T04:00:00Z", status: "open", checked_at: "2026-08-16T00:00:00Z" }, now)?.status, "scheduled");
+  assert.equal(parseSupportEvent({ ...rawEvent, starts_at: "2026-08-15T01:00:00Z", ends_at: "2026-08-15T04:00:00Z", status: "open", checked_at: "2026-08-16T00:00:00Z" }, now)?.status, "ended");
+  assert.equal(parseSupportEvent({
+    id: "bad-source",
+    area: "mobara",
+    category: "meal",
+    title: "炊き出し",
+    organizer: "公式団体",
+    venue: "市民会館",
+    starts_at: "2026-08-16T01:00:00Z",
+    ends_at: "2026-08-16T04:00:00Z",
+    source_url: "http://localhost/event",
+    status: "open",
+    checked_at: "2026-08-16T00:00:00Z",
+  }, now), null);
+  assert.equal(publicSupportEventsEnabled("on"), true);
+  assert.equal(publicSupportEventsEnabled(""), false);
+  const townHtml = renderTown(
+    "https://saigaiban.com",
+    "https://opennavi.org",
+    { disaster: { id: "r8", label: "テスト災害" }, areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" }] },
+    "mobara",
+    [],
+    false,
+    new Map(),
+    null,
+    false,
+    "",
+    "",
+    { available: true, events: [event] },
+  );
+  assert.match(townHtml, /茂原市の支援イベント/);
+  assert.match(townHtml, /会場をGoogleマップで確認/);
+  assert.match(townHtml, /掲載元の公式ページを確認する/);
+  const db = {
+    prepare() {
+      return { bind() { return { all: async () => ({ results: [] }) }; } };
+    },
+  } as unknown as D1Database;
+  assert.deepEqual(await listSupportEvents(db, "mobara", now), { available: true, events: [] });
 });
 
 test("home shows one prefecture at a time behind tabs", () => {

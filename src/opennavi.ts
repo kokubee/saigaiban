@@ -3,6 +3,7 @@ import { getCachedJson, publicCacheMode, type PublicCacheMode } from "./cache.ts
 import { normalizePlaceCategory } from "./labels.ts";
 
 export const DEFAULT_OPENNAVI = "https://opennavi.org";
+export const KUMAMOTO_RESIDENT_SUPPORT = "https://kumamoto-shien.jp/";
 
 export function opennaviOrigin(raw?: string): string {
   const value = String(raw || "").trim().replace(/\/+$/, "");
@@ -18,6 +19,11 @@ export function officialHubUrl(origin: string, slug: string): string {
 
 export function officialSupportUrl(origin: string): string {
   return `${opennaviOrigin(origin)}/support`;
+}
+
+/** The Kumamoto resident board has been consolidated into the dedicated support navigator. */
+export function kumamotoResidentSupportUrl(): string {
+  return KUMAMOTO_RESIDENT_SUPPORT;
 }
 
 /** OpenNavi's resident/nearby entry, scoped to a town when one is known. */

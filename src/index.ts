@@ -2,13 +2,23 @@ import {
   renderAbout,
   renderHome,
   renderLegal,
+  renderLlms,
   renderNotFound,
   renderPlace,
+  renderProtocol,
   renderRobots,
   renderSitemap,
   renderTown,
 } from "./html.ts";
-import { fetchMeta, fetchPlaceById, fetchPlaces, officialSupportUrl, officialVictimUrl, opennaviOrigin } from "./opennavi.ts";
+import {
+  fetchMeta,
+  fetchPlaceById,
+  fetchPlaces,
+  kumamotoResidentSupportUrl,
+  officialSupportUrl,
+  officialVictimUrl,
+  opennaviOrigin,
+} from "./opennavi.ts";
 import {
   allowedOrigin,
   cleanNote,
@@ -26,7 +36,10 @@ import { publicPostingAreas, publicPostingEnabledForArea } from "./posting.ts";
 import { purgeExpiredIpHashes, rateLimitConfigured, shortIpHmac } from "./rate-limit.ts";
 import { adminRequestHeadersAllowed, reportRequestHeadersAllowed } from "./request.ts";
 import { turnstileConfigured, turnstileHostnames, verifyTurnstile } from "./turnstile.ts";
-import type { BoardPlace, Env } from "./types.ts";
+import { listSupportEvents, publicSupportEventsEnabled } from "./support-events.ts";
+import { buildHandoffDocument } from "./handoff.ts";
+import { buildProtocolDiscoveryDocument } from "./protocol.ts";
+import type { BoardPlace, Env, PlaceSummary } from "./types.ts";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -43,10 +56,19 @@ export default {
       postingSecurityReady && publicPostingEnabledForArea(env.PUBLIC_POSTING_MODE, areaSlug, postingAreas);
     const reportingEnabled = rateLimitConfigured(env.RATE_LIMIT_HMAC_SECRET);
     const path = url.pathname.replace(/\/+$/, "") || "/";
+    const protocolHandoffPath = path.match(/^\/api\/opennavi\/v1\/handoff\/([a-z0-9-]+)$/i);
+    const legacyHandoffPath = path.match(/^\/api\/handoff\/([a-z0-9-]+)$/i);
+    const handoffPath = protocolHandoffPath || legacyHandoffPath;
 
     try {
       if (path === "/robots.txt") {
         return text(renderRobots(site), "text/plain; charset=utf-8");
+      }
+      if (path === "/llms.txt") {
+        return text(renderLlms(site, origin), "text/plain; charset=utf-8");
+      }
+      if (path === "/.well-known/opennavi.json") {
+        return protocolJson(buildProtocolDiscoveryDocument(site, origin));
       }
       if (path === "/health") {
         return json({ ok: true });
@@ -55,7 +77,17 @@ export default {
         return html(renderLegal(site, origin, path.slice(1) as "legal" | "terms" | "privacy" | "research", measurementId));
       }
       if (path === "/support" || path.startsWith("/support/tourism/")) {
+        const destination = String(url.searchParams.get("destination") || url.searchParams.get("pref") || "").trim().toLowerCase();
+        if (destination === "kumamoto" || destination === "43") {
+          return Response.redirect(kumamotoResidentSupportUrl(), 302);
+        }
         return Response.redirect(officialSupportUrl(origin), 302);
+      }
+      if (path === "/") {
+        const pref = String(url.searchParams.get("pref") || "").trim().toLowerCase();
+        if (pref === "kumamoto" || pref === "43") {
+          return Response.redirect(kumamotoResidentSupportUrl(), 302);
+        }
       }
 
       const flagPath = path.match(/^\/api\/reports\/([0-9a-f-]{8,})\/flag$/i);
@@ -66,6 +98,12 @@ export default {
       if (moderationPath && request.method === "POST") {
         return handleModeration(request, env, moderationPath[1]);
       }
+      if (handoffPath && request.method === "OPTIONS") {
+        return handoffOptions();
+      }
+      if (path === "/protocol" || path === "/protocol/opennavi/v1") {
+        return html(renderProtocol(site, origin, measurementId));
+      }
 
       const earlyPlacePath = path.match(/^\/a\/([a-z0-9-]+)\/p\/([0-9a-f-]{8,})$/i);
       if (earlyPlacePath && request.method === "POST" && !postingEnabledForArea(earlyPlacePath[1])) {
@@ -73,6 +111,10 @@ export default {
       }
 
       const meta = await fetchMeta(origin, env.PUBLIC_READ_CACHE);
+
+      if (handoffPath) {
+        return handleHandoff(request, env, site, origin, meta, handoffPath[1], url.searchParams.get("cursor"));
+      }
 
       if (path === "/sitemap.xml") {
         return text(renderSitemap(site, meta.areas.map((a) => a.slug)), "application/xml; charset=utf-8");
@@ -116,12 +158,20 @@ export default {
           limit: showAll || selectedCategory || searchQuery ? 200 : 80,
           ...(selectedCategory ? { category: selectedCategory } : {}),
         }, env.PUBLIC_READ_CACHE);
-        const summaries = await latestByPlaces(env.DB, page.places.map((p) => p.id));
-        return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries, measurementId, postingEnabledForArea(slug), selectedCategory, searchQuery));
+        const [summaries, supportEvents] = await Promise.all([
+          latestByPlaces(env.DB, page.places.map((p) => p.id)),
+          publicSupportEventsEnabled(env.PUBLIC_SUPPORT_EVENTS_MODE)
+            ? listSupportEvents(env.DB, slug)
+            : Promise.resolve({ available: false, events: [] }),
+        ]);
+        return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries, measurementId, postingEnabledForArea(slug), selectedCategory, searchQuery, supportEvents));
       }
 
       return html(renderNotFound(site, measurementId), 404);
     } catch (error) {
+      if (handoffPath) {
+        return handoffJson({ ok: false, error: "引き継ぎデータを取得できません。" }, 502);
+      }
       const message = error instanceof Error ? error.message : "error";
       return html(
         `<!doctype html><meta charset="utf-8"><title>災害板</title><p>いま板を開けません。公式ハブを見てください。</p><p><a href="${officialVictimUrl(origin)}">OpenNavi（被災者向け）</a></p><!-- ${message.replace(/</g, "")} -->`,
@@ -133,6 +183,37 @@ export default {
     ctx.waitUntil(purgeExpiredIpHashes(env.DB));
   },
 };
+
+async function handleHandoff(
+  request: Request,
+  env: Env,
+  site: string,
+  origin: string,
+  meta: Awaited<ReturnType<typeof fetchMeta>>,
+  slug: string,
+  rawCursor: string | null,
+): Promise<Response> {
+  if (request.method !== "GET") return handoffJson({ ok: false, error: "GETまたはOPTIONSだけ利用できます。" }, 405);
+  const area = meta.areas.find((candidate) => candidate.slug === slug);
+  if (!area) return handoffJson({ ok: false, error: "地域が見つかりません。" }, 404);
+  try {
+    const cursor = String(rawCursor || "").trim().slice(0, 256) || undefined;
+    const page = await fetchPlaces(origin, slug, { limit: 200, ...(cursor ? { cursor } : {}) }, env.PUBLIC_READ_CACHE);
+    const summaries = await latestByPlacesInChunks(env.DB, page.places.map((place) => place.id));
+    return handoffJson(buildHandoffDocument(site, meta, area, page.places, summaries, page.generated_at || null, page.next_cursor || null));
+  } catch {
+    return handoffJson({ ok: false, error: "引き継ぎデータを取得できません。" }, 502);
+  }
+}
+
+async function latestByPlacesInChunks(db: D1Database, placeIds: string[]): Promise<Map<string, PlaceSummary>> {
+  const out = new Map<string, PlaceSummary>();
+  for (let offset = 0; offset < placeIds.length; offset += 80) {
+    const chunk = await latestByPlaces(db, placeIds.slice(offset, offset + 80));
+    for (const [id, summary] of chunk) out.set(id, summary);
+  }
+  return out;
+}
 
 async function handlePost(
   request: Request,
@@ -284,4 +365,36 @@ function text(body: string, type: string): Response {
 
 function json(body: unknown, status = 200): Response {
   return Response.json(body, { status });
+}
+
+function protocolJson(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "public, max-age=300",
+      "x-content-type-options": "nosniff",
+    },
+  });
+}
+
+function handoffOptions(): Response {
+  return new Response(null, { status: 204, headers: handoffHeaders() });
+}
+
+function handoffJson(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: handoffHeaders(),
+  });
+}
+
+function handoffHeaders(): HeadersInit {
+  return {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "public, max-age=60, stale-while-revalidate=300",
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET, OPTIONS",
+    "access-control-allow-headers": "Content-Type",
+    "x-content-type-options": "nosniff",
+  };
 }
