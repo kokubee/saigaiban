@@ -610,6 +610,7 @@ test("home page head includes GA4 when configured", () => {
   assert.match(html, /id=G-4KQPS1LRHV/);
   assert.match(html, /gtag\('config', 'G-4KQPS1LRHV'\)/);
   assert.match(html, /https:\/\/kumamoto-shien\.jp\//);
+  assert.match(html, /https:\/\/www\.mlit\.go\.jp\/road\/saigai\/r8kumamoto\/index\.html/);
   assert.match(html, /\/support\?destination=kumamoto/);
   assert.equal(renderHome("https://saigaiban.com", "https://opennavi.org", {
     disaster: { id: "r8-chiba-heavy-rain", label: "令和8年千葉県豪雨" },

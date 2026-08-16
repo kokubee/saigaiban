@@ -4,6 +4,7 @@ import { normalizePlaceCategory } from "./labels.ts";
 
 export const DEFAULT_OPENNAVI = "https://opennavi.org";
 export const KUMAMOTO_RESIDENT_SUPPORT = "https://kumamoto-shien.jp/";
+export const KUMAMOTO_ROAD_MAP = "https://www.mlit.go.jp/road/saigai/r8kumamoto/index.html";
 
 export function opennaviOrigin(raw?: string): string {
   const value = String(raw || "").trim().replace(/\/+$/, "");
