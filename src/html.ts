@@ -1,6 +1,6 @@
 import { CATEGORY_FILTERS, categoryDescription, categoryLabel, isShelter, isShopLike, isKnownCategory, prefName } from "./labels.ts";
 import { googleMapsSearchUrl } from "./maps.ts";
-import { KUMAMOTO_RESIDENT_SUPPORT, KUMAMOTO_ROAD_MAP, officialHubUrl, officialSupportUrl, officialVictimUrl } from "./opennavi.ts";
+import { KUMAMOTO_BODIK, KUMAMOTO_RESIDENT_SUPPORT, KUMAMOTO_ROAD_MAP, officialHubUrl, officialSupportUrl, officialVictimUrl } from "./opennavi.ts";
 import { evidenceLabel } from "./evidence.ts";
 import { VERDICT_LABEL, VISITOR_VERDICTS, formatWhen } from "./reports.ts";
 import { supportEventCategoryLabel, supportEventFreshnessLabel, supportEventStatusLabel } from "./support-events.ts";
@@ -270,6 +270,7 @@ export function renderHome(
         <div class="provider-links">
           <a href="${KUMAMOTO_RESIDENT_SUPPORT}" target="_blank" rel="noreferrer"><strong>くまもと被災者支援ナビ ↗</strong><span>給水・支援金・り災証明など</span></a>
           <a href="${KUMAMOTO_ROAD_MAP}" target="_blank" rel="noreferrer"><strong>国土交通省 通れるマップ ↗</strong><span>道路の通行規制・緊急車両が通れる区間</span></a>
+          <a href="${KUMAMOTO_BODIK}" target="_blank" rel="noreferrer"><strong>BODIK｜令和8年熊本地震オープンデータ ↗</strong><span>熊本県・市町村の公式オープンデータを横断して確認</span></a>
           <a href="${escapeHtml(officialSupportUrl(origin))}?destination=kumamoto"><strong>熊本を外から支援する ↗</strong><span>公式支援・寄付・買って支援・旅して支援</span></a>
         </div>
       </section>
