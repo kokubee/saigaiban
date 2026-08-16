@@ -13,7 +13,7 @@
     "PUBLIC_READ_CACHE": "off",
     "PUBLIC_POSTING_MODE": "off",
     "PUBLIC_POSTING_AREAS": "",
-    "PUBLIC_SUPPORT_EVENTS_MODE": "off",
+    "PUBLIC_SUPPORT_EVENTS_MODE": "on",
     "PUBLIC_TURNSTILE_HOSTNAMES": "saigaiban.com,www.saigaiban.com"
   },
   "routes": [
