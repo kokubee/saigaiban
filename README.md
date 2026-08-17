@@ -16,6 +16,12 @@ OpenNavi の場所台帳から、町ごとの掲示板を立てる OSS です。
 
 場所は `GET https://opennavi.org/api/board/meta` と `GET https://opennavi.org/api/board/places` だけを読みます。`/api/spots` は使いません。
 
+公式の休業・一部営業情報を運営が一次URL付きで確認した場合は、補助的に
+`GET https://opennavi.org/api/board/official-status?area=<slug>` を読み、同じ町・カテゴリ・店名の
+カードへ出典付きで重ねます。これは場所マスターや住民投稿を営業中へ昇格させる仕組みではなく、
+`fresh`（24時間以内）／`stale`（72時間以内）の鮮度を表示します。公式一覧から消えただけの店を
+自動で休業・閉店にはしません。
+
 ## OpenNavi Protocol
 
 災害板は、平時からOpenNaviの場所マスターをもとに市区町村ごとの表示を準備し、災害時の初動で使えるようにします。現地の公式サイトや専用サイトが立ち上がったら、そちらを正本として案内します。

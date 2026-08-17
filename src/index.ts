@@ -12,6 +12,7 @@ import {
 } from "./html.ts";
 import {
   fetchMeta,
+  fetchOfficialStatuses,
   fetchPlaceById,
   fetchPlaces,
   kumamotoResidentSupportUrl,
@@ -158,13 +159,14 @@ export default {
           limit: showAll || selectedCategory || searchQuery ? 200 : 80,
           ...(selectedCategory ? { category: selectedCategory } : {}),
         }, env.PUBLIC_READ_CACHE);
-        const [summaries, supportEvents] = await Promise.all([
+        const [summaries, supportEvents, officialStatuses] = await Promise.all([
           latestByPlaces(env.DB, page.places.map((p) => p.id)),
           publicSupportEventsEnabled(env.PUBLIC_SUPPORT_EVENTS_MODE)
             ? listSupportEvents(env.DB, slug)
             : Promise.resolve({ available: false, events: [] }),
+          fetchOfficialStatuses(origin, slug, selectedCategory ? [selectedCategory] : [], env.PUBLIC_READ_CACHE),
         ]);
-        return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries, measurementId, postingEnabledForArea(slug), selectedCategory, searchQuery, supportEvents));
+        return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries, measurementId, postingEnabledForArea(slug), selectedCategory, searchQuery, supportEvents, officialStatuses));
       }
 
       return html(renderNotFound(site, measurementId), 404);

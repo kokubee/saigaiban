@@ -5,7 +5,7 @@ import { evidenceLabel } from "./evidence.ts";
 import { VERDICT_LABEL, VISITOR_VERDICTS, formatWhen } from "./reports.ts";
 import { supportEventCategoryLabel, supportEventFreshnessLabel, supportEventStatusLabel } from "./support-events.ts";
 import { tourismAreaConfig } from "./tourism-areas.ts";
-import type { BoardMeta, BoardPlace, PlaceSummary, Report, SupportEventQueryResult, TourismFetchResult } from "./types.ts";
+import type { BoardMeta, BoardOfficialStatus, BoardPlace, PlaceSummary, Report, SupportEventQueryResult, TourismFetchResult } from "./types.ts";
 import { HANDOFF_SCHEMA, OPENNAVI_HANDOFF_PROFILE, OPENNAVI_PROTOCOL_NAME, OPENNAVI_PROTOCOL_VERSION, handoffApiUrl, legacyHandoffApiUrl } from "./protocol.ts";
 
 export function escapeHtml(value: unknown): string {
@@ -294,6 +294,7 @@ export function renderTown(
   selectedCategory?: string,
   searchQuery?: string,
   supportEvents: SupportEventQueryResult = { available: false, events: [] },
+  officialStatuses: BoardOfficialStatus[] = [],
 ): string {
   const area = meta.areas.find((a) => a.slug === slug);
   if (!area) return renderNotFound(site, measurementId);
@@ -329,7 +330,7 @@ export function renderTown(
     .map(([cat, list]) => {
       const shown = list.slice(0, preview);
       const more = list.length - shown.length;
-      const cards = shown.map((p) => renderCard(slug, area.nameJa, p, summaries.get(p.id), allowPosting)).join("");
+      const cards = shown.map((p) => renderCard(slug, area.nameJa, p, summaries.get(p.id), allowPosting, officialStatusForPlace(officialStatuses, p))).join("");
       const extra =
         more > 0
           ? `<p class="note"><a href="/a/${escapeHtml(slug)}?${escapeHtml(queryString(cat))}&all=1">この種別をすべて見る（あと${more}件）</a></p>`
@@ -337,6 +338,8 @@ export function renderTown(
       return `<h2>${escapeHtml(categoryLabel(cat))}</h2><p class="category-note">${escapeHtml(categoryDescription(cat))}</p><div class="cards">${cards}</div>${extra}`;
     })
     .join("");
+  const unmatchedOfficialStatuses = officialStatuses.filter((status) => !places.some((place) => officialStatusForPlace([status], place)));
+  const officialOnly = renderUnmatchedOfficialStatuses(unmatchedOfficialStatuses);
   const tools = `<section class="town-tools" aria-labelledby="town-tools-title">
     <h2 id="town-tools-title">まず探す場所を絞る</h2>
     <nav class="category-filters" aria-label="場所のカテゴリ">${filterLinks}</nav>
@@ -358,6 +361,7 @@ export function renderTown(
       <h1>${escapeHtml(area.nameJa)}の災害板</h1>
       <p class="lead">${allowPosting ? "場所の正体に、「いまどうだったか」を書けます。" : "場所ごとのこれまでの報告を確認できます。"} 投稿は見た時点の話で、公式ではありません。店の営業は地図、避難所の開設は公式ハブで確認してください。</p>
       ${tools}
+      ${officialOnly}
       ${renderSupportEvents(origin, area.nameJa, supportEvents)}
       ${sections || `<p class="note">条件に合う場所がありません。カテゴリを戻すか、検索語を短くしてみてください。</p>`}
       ${footer(origin, meta, slug)}
@@ -408,13 +412,71 @@ function formatEventRange(startsAt: string, endsAt: string): string {
   return `${formatEventDate(startsAt)}〜${formatEventDate(endsAt)}`;
 }
 
-function renderCard(slug: string, areaName: string, place: BoardPlace, summary?: PlaceSummary, allowPosting = false): string {
+function officialStatusKey(category: string, name: string): string {
+  return `${String(category || "").trim().toLocaleLowerCase("ja-JP")}:${String(name || "")
+    .normalize("NFKC")
+    .toLocaleLowerCase("ja-JP")
+    .replace(/[\s・･\-‐‑–—＿_.,，。()（）[\]【】]/g, "")}`;
+}
+
+function metersBetween(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const rad = (value: number) => (value * Math.PI) / 180;
+  const earth = 6_371_000;
+  const dLat = rad(bLat - aLat);
+  const dLng = rad(bLng - aLng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * earth * Math.asin(Math.sqrt(h));
+}
+
+function officialStatusForPlace(statuses: BoardOfficialStatus[], place: BoardPlace): BoardOfficialStatus | undefined {
+  const exact = statuses.filter((status) => officialStatusKey(status.category, status.name) === officialStatusKey(place.category, place.name));
+  if (exact.length === 1) return exact[0];
+  if (typeof place.lat !== "number" || typeof place.lng !== "number") return undefined;
+  const nearby = statuses
+    .filter((status) => status.category === place.category && typeof status.lat === "number" && typeof status.lng === "number")
+    .map((status) => ({ status, meters: metersBetween(place.lat!, place.lng!, status.lat!, status.lng!) }))
+    .filter((item) => item.meters <= 150)
+    .sort((a, b) => a.meters - b.meters);
+  return nearby.length === 1 ? nearby[0].status : undefined;
+}
+
+function renderUnmatchedOfficialStatuses(statuses: BoardOfficialStatus[]): string {
+  if (!statuses.length) return "";
+  const cards = statuses.map((status) => `<article class="event-card">
+    <h3><span class="tag">${escapeHtml(officialStatusLabel(status))}</span>${escapeHtml(status.name)}</h3>
+    <p>${escapeHtml(status.headline || "公式情報が確認されています")}</p>
+    <p class="note">確認: ${escapeHtml(formatWhen(status.checkedAt))}・${status.freshness === "stale" ? "古い可能性あり" : "24時間以内"} <a href="${escapeHtml(status.sourceUrl)}" rel="noopener">出典</a></p>
+  </article>`).join("");
+  return `<section class="support-card" aria-labelledby="official-status-title">
+    <h2 id="official-status-title">場所台帳に未登録の公式確認情報</h2>
+    <p class="note">公式ページで確認できた情報です。地図上の場所カードがまだないため、別枠で表示しています。</p>
+    <div class="event-list">${cards}</div>
+  </section>`;
+}
+
+function officialStatusLabel(status: BoardOfficialStatus): string {
+  const suffix = status.freshness === "stale" ? "（要再確認）" : "";
+  if (status.status === "closed") return `公式確認・休業${suffix}`;
+  if (status.status === "limited") return `公式確認・一部営業${suffix}`;
+  return `公式確認・営業情報${suffix}`;
+}
+
+function renderCard(
+  slug: string,
+  areaName: string,
+  place: BoardPlace,
+  summary?: PlaceSummary,
+  allowPosting = false,
+  officialStatus?: BoardOfficialStatus,
+): string {
   const owner = summary?.latestOwner;
   const latest = summary?.latest;
   const mapsUrl = googleMapsSearchUrl(place.name, areaName, place.address);
   const steerMaps = Boolean(owner && (owner.prefer_maps || owner.verdict === "maps") && mapsUrl);
   const ownerEvidence = owner?.evidence || { authority: "operator", review: "unknown", freshness: "unknown" } as const;
-  const tag = steerMaps
+  const tag = officialStatus
+    ? `<span class="tag">${escapeHtml(officialStatusLabel(officialStatus))}</span>`
+    : steerMaps
     ? `<span class="tag">店側 地図へ</span>`
     : owner
       ? `<span class="tag">店側 ${escapeHtml(VERDICT_LABEL[owner.verdict])}</span>`
@@ -425,6 +487,9 @@ function renderCard(slug: string, areaName: string, place: BoardPlace, summary?:
     ? steerMaps
       ? `<div class="owner"><p>店側は、営業を Google マップの情報へ寄せています（${escapeHtml(evidenceLabel(ownerEvidence))}）。</p><p><a href="${escapeHtml(mapsUrl)}" rel="noopener">Googleマップの営業情報を見る</a></p></div>`
       : `<p class="note">店側の自己申告: ${escapeHtml(VERDICT_LABEL[owner.verdict])}（${escapeHtml(formatWhen(owner.created_at))}・${escapeHtml(activityWindowLabel(owner.created_at))}・${escapeHtml(evidenceLabel(ownerEvidence))}）</p>`
+    : "";
+  const officialLine = officialStatus
+    ? `<p class="note">${escapeHtml(officialStatus.headline || officialStatusLabel(officialStatus))}（確認: ${escapeHtml(formatWhen(officialStatus.checkedAt))}・${officialStatus.freshness === "stale" ? "古い可能性あり" : "24時間以内"}） <a href="${escapeHtml(officialStatus.sourceUrl)}" rel="noopener">出典</a></p>`
     : "";
   const latestLine = !steerMaps && latest && latest.role !== "owner"
     ? `<p class="note">見かけた人: ${escapeHtml(VERDICT_LABEL[latest.verdict])}（${escapeHtml(formatWhen(latest.created_at))}・${escapeHtml(activityWindowLabel(latest.created_at))}・${escapeHtml(evidenceLabel(latest.evidence || { authority: "resident", review: "unknown", freshness: "unknown" }))}）</p>`
@@ -440,7 +505,7 @@ function renderCard(slug: string, areaName: string, place: BoardPlace, summary?:
   const addr = place.address ? `<p class="note">${escapeHtml(place.address)}</p>` : "";
   return `<article class="card">
     <h3>${tag}${escapeHtml(place.name)}</h3>
-    ${addr}${shelter}${ownerLine}${latestLine}
+    ${addr}${shelter}${officialLine}${ownerLine}${latestLine}
     <p>${maps}${maps ? " ・ " : ""}<a href="/a/${escapeHtml(slug)}/p/${escapeHtml(place.id)}">${allowPosting ? "いまどうかを書く" : "これまでの報告を見る"}</a></p>
   </article>`;
 }

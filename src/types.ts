@@ -28,6 +28,27 @@ export type BoardPlacesPage = {
   places: BoardPlace[];
 };
 
+/** Official, operator-curated status projection from OpenNavi. */
+export type BoardOfficialStatus = {
+  name: string;
+  area: string;
+  category: string;
+  status: "open" | "limited" | "closed";
+  headline: string | null;
+  sourceUrl: string;
+  checkedAt: string;
+  freshness: "fresh" | "stale";
+  lat: number | null;
+  lng: number | null;
+};
+
+export type BoardOfficialStatusPage = {
+  disaster_id: string;
+  area: string;
+  generated_at: string;
+  statuses: BoardOfficialStatus[];
+};
+
 export type Verdict = "open" | "limited" | "closed" | "still" | "changed" | "maps";
 
 export type ReportRole = "visitor" | "owner";

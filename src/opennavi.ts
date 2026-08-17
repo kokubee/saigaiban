@@ -1,4 +1,4 @@
-import type { BoardMeta, BoardPlace, BoardPlacesPage } from "./types.ts";
+import type { BoardMeta, BoardOfficialStatus, BoardOfficialStatusPage, BoardPlace, BoardPlacesPage } from "./types.ts";
 import { getCachedJson, publicCacheMode, type PublicCacheMode } from "./cache.ts";
 import { normalizePlaceCategory } from "./labels.ts";
 
@@ -152,4 +152,44 @@ export async function fetchPlaces(
     next_cursor: doc?.next_cursor || null,
     places,
   };
+}
+
+/** Read-only official status overlay; identity cards still come from /api/board/places. */
+export async function fetchOfficialStatuses(
+  origin: string,
+  area: string,
+  categories: string[] = [],
+  publicReadCache?: string,
+): Promise<BoardOfficialStatus[]> {
+  const qs = new URLSearchParams({ area });
+  const normalized = categories.map((value) => value.trim()).filter(Boolean);
+  if (normalized.length) qs.set("category", normalized.join(","));
+  let doc: BoardOfficialStatusPage | null;
+  try {
+    doc = (await getCachedJson(
+      `${opennaviOrigin(origin)}/api/board/official-status?${qs}`,
+      cacheMode(publicReadCache),
+      OPENNAVI_CACHE_TTL,
+      OPENNAVI_CACHE_STALE,
+    )) as BoardOfficialStatusPage | null;
+  } catch {
+    // The overlay is optional. A transient upstream failure must not take
+    // down the identity-only board that already worked before this endpoint.
+    return [];
+  }
+  if (!doc || !Array.isArray(doc.statuses)) return [];
+  return doc.statuses.filter((status): status is BoardOfficialStatus =>
+    Boolean(
+      status &&
+      typeof status.name === "string" &&
+      typeof status.area === "string" &&
+      typeof status.category === "string" &&
+      ["open", "limited", "closed"].includes(status.status) &&
+      typeof status.sourceUrl === "string" &&
+      /^https:\/\/[^\s]+$/i.test(status.sourceUrl) &&
+      ["fresh", "stale"].includes(status.freshness) &&
+      (status.lat === null || (typeof status.lat === "number" && Number.isFinite(status.lat))) &&
+      (status.lng === null || (typeof status.lng === "number" && Number.isFinite(status.lng))),
+    ),
+  );
 }

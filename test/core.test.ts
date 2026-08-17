@@ -287,6 +287,141 @@ test("town cards put recent reports first and show six-to-twelve-hour windows", 
   assert.match(html, /直近6時間/);
 });
 
+test("town cards show an operator-curated official status with its source and freshness", () => {
+  const meta = {
+    disaster: { id: "r8-chiba-heavy-rain", label: "令和8年千葉県豪雨" },
+    areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" }],
+  };
+  const place = {
+    id: "official-place",
+    seed_key: "spot:conv:mobara:公式店",
+    name: "公式店",
+    area: "mobara",
+    category: "conv",
+    lat: null,
+    lng: null,
+    address: null,
+    source: "openstreetmap",
+    data_basis_date: null,
+    identity_only: true as const,
+    maps_url: "",
+  };
+  const html = renderTown(
+    "https://saigaiban.com",
+    "https://opennavi.org",
+    meta,
+    "mobara",
+    [place],
+    true,
+    new Map(),
+    null,
+    false,
+    "conv",
+    "",
+    { available: false, events: [] },
+    [{
+      name: "公式店",
+      area: "mobara",
+      category: "conv",
+      status: "closed",
+      headline: "公式発表で臨時休業",
+      sourceUrl: "https://example.com/official-store-status",
+      checkedAt: new Date().toISOString(),
+      freshness: "fresh",
+      lat: null,
+      lng: null,
+    }],
+  );
+  assert.match(html, /公式確認・休業/);
+  assert.match(html, /公式発表で臨時休業/);
+  assert.match(html, /example\.com\/official-store-status/);
+  assert.doesNotMatch(html, /公式店<\/h3>[\s\S]*未確認/);
+});
+
+test("town cards can join an official status by coordinates when the master name is generic", () => {
+  const meta = {
+    disaster: { id: "r8-chiba-heavy-rain", label: "令和8年千葉県豪雨" },
+    areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" }],
+  };
+  const html = renderTown(
+    "https://saigaiban.com",
+    "https://opennavi.org",
+    meta,
+    "mobara",
+    [{
+      id: "generic-store",
+      seed_key: "spot:super:mobara:イオン",
+      name: "イオン",
+      area: "mobara",
+      category: "super",
+      lat: 35.43,
+      lng: 140.3,
+      address: null,
+      source: "openstreetmap",
+      data_basis_date: null,
+      identity_only: true as const,
+      maps_url: "",
+    }],
+    true,
+    new Map(),
+    null,
+    false,
+    "super",
+    "",
+    { available: false, events: [] },
+    [{
+      name: "イオン茂原店",
+      area: "mobara",
+      category: "super",
+      status: "limited",
+      headline: "公式発表で一部営業",
+      sourceUrl: "https://example.com/official-super-status",
+      checkedAt: new Date().toISOString(),
+      freshness: "fresh",
+      lat: 35.4301,
+      lng: 140.3001,
+    }],
+  );
+  assert.match(html, /公式確認・一部営業/);
+  assert.match(html, /公式発表で一部営業/);
+});
+
+test("town pages keep an official status visible when no identity card matches", () => {
+  const meta = {
+    disaster: { id: "r8-chiba-heavy-rain", label: "令和8年千葉県豪雨" },
+    areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" }],
+  };
+  const html = renderTown(
+    "https://saigaiban.com",
+    "https://opennavi.org",
+    meta,
+    "mobara",
+    [],
+    true,
+    new Map(),
+    null,
+    false,
+    "super",
+    "",
+    { available: false, events: [] },
+    [{
+      name: "施設公式店",
+      area: "mobara",
+      category: "super",
+      status: "closed",
+      headline: "公式ページで臨時休業を確認",
+      sourceUrl: "https://example.com/official-unmatched",
+      checkedAt: new Date().toISOString(),
+      freshness: "fresh",
+      lat: null,
+      lng: null,
+    }],
+  );
+  assert.match(html, /場所台帳に未登録の公式確認情報/);
+  assert.match(html, /施設公式店/);
+  assert.match(html, /公式ページで臨時休業を確認/);
+});
+
 test("reporting UI is hidden until the independent HMAC gate is ready", () => {
   const meta = {
     disaster: { id: "r8-chiba-heavy-rain", label: "令和8年千葉県豪雨" },
