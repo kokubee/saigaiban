@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getCachedJson, publicCacheMode } from "../src/cache.ts";
 import { evidenceLabel, freshnessFor, reportEvidence } from "../src/evidence.ts";
-import { activityWindowLabel, escapeHtml, gaSnippet, renderHome, renderLlms, renderPlace, renderRobots, renderTown } from "../src/html.ts";
+import { activityWindowLabel, escapeHtml, gaSnippet, renderHome, renderLlms, renderPlace, renderRobots, renderSitemap, renderTown } from "../src/html.ts";
 import { categoryDescription, categoryLabel, isShelter, normalizePlaceCategory } from "../src/labels.ts";
 import { googleMapsSearchUrl } from "../src/maps.ts";
 import { officialHubUrl, officialVictimUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
@@ -825,6 +825,7 @@ test("public SEO assets describe the resident board without exposing APIs", () =
   assert.match(llms, /場所カード/);
   assert.match(llms, /公式発表/);
   assert.match(llms, /https:\/\/saigaiban\.com\/legal/);
+  assert.match(renderSitemap("https://saigaiban.com", ["mobara"]), /https:\/\/saigaiban\.com\/protocol\/opennavi\/v1/);
 });
 
 test("support events require an HTTPS source and stale entries become review-only", async () => {

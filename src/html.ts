@@ -921,7 +921,7 @@ export function renderLlms(site: string, origin: string): string {
 }
 
 export function renderSitemap(site: string, slugs: string[]): string {
-  const urls = [`${site}/`, `${site}/about`, `${site}/legal`, ...slugs.map((s) => `${site}/a/${s}`)];
+  const urls = [`${site}/`, `${site}/about`, `${site}/protocol/opennavi/v1`, `${site}/legal`, ...slugs.map((s) => `${site}/a/${s}`)];
   const body = urls
     .map((u) => `  <url><loc>${escapeHtml(u)}</loc></url>`)
     .join("\n");
