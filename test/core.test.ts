@@ -853,6 +853,27 @@ test("home shows one prefecture at a time behind tabs", () => {
   assert.doesNotMatch(second, /茂原市の市区町村/);
 });
 
+test("home uses OpenNavi region groups when board meta provides them", () => {
+  const meta = {
+    disaster: { id: "r8-chiba-heavy-rain", label: "令和8年千葉県豪雨" },
+    areas: [
+      { slug: "chiba-chuo", nameJa: "千葉市中央区", prefCode: "12", status: "active", region: { id: "chiba-city", label: "千葉市", order: 0 } },
+      { slug: "ichikawa", nameJa: "市川市", prefCode: "12", status: "active", region: { id: "bay-area", label: "ベイエリア（千葉市外）", order: 1 } },
+      { slug: "matsudo", nameJa: "松戸市", prefCode: "12", status: "active", region: { id: "tokatsu", label: "東葛飾", order: 2 } },
+    ],
+  };
+  const first = renderHome("https://saigaiban.com", "https://opennavi.org", meta);
+  assert.match(first, /aria-label="地域"/);
+  assert.match(first, /千葉市/);
+  assert.match(first, /千葉市中央区/);
+  assert.doesNotMatch(first, /市川市の市区町村/);
+  assert.match(first, /\?region=bay-area/);
+  const second = renderHome("https://saigaiban.com", "https://opennavi.org", meta, null, null, "bay-area");
+  assert.match(second, /ベイエリア（千葉市外）/);
+  assert.match(second, /市川市/);
+  assert.doesNotMatch(second, /千葉市中央区の市区町村/);
+});
+
 test("verdict and note rules reject matching and contacts", () => {
   assert.equal(parseVerdict("open"), "open");
   assert.equal(parseVerdict("営業中"), null);

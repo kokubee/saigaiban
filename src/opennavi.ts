@@ -123,6 +123,14 @@ export async function fetchMeta(origin: string, publicReadCache?: string): Promi
         nameJa: String(a.nameJa || a.slug),
         prefCode: String(a.prefCode || ""),
         status: "active",
+        region:
+          a.region && typeof a.region === "object" && typeof a.region.id === "string" && typeof a.region.label === "string"
+            ? {
+                id: a.region.id,
+                label: a.region.label,
+                order: Number.isFinite(Number(a.region.order)) ? Number(a.region.order) : Number.MAX_SAFE_INTEGER,
+              }
+            : null,
       })),
     placeLicense: doc.placeLicense,
   };

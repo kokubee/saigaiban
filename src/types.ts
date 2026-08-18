@@ -2,7 +2,13 @@ import type { EvidenceProjection } from "./evidence.ts";
 
 export type BoardMeta = {
   disaster: { id: string; label: string };
-  areas: Array<{ slug: string; nameJa: string; prefCode: string; status: string }>;
+  areas: Array<{
+    slug: string;
+    nameJa: string;
+    prefCode: string;
+    status: string;
+    region?: { id: string; label: string; order: number } | null;
+  }>;
   placeLicense?: { osm?: string; gsi?: string };
 };
 

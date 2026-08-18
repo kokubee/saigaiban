@@ -124,7 +124,7 @@ export default {
         return html(renderAbout(site, origin, measurementId));
       }
       if (path === "/") {
-        return html(renderHome(site, origin, meta, measurementId, url.searchParams.get("pref")));
+        return html(renderHome(site, origin, meta, measurementId, url.searchParams.get("pref"), url.searchParams.get("region")));
       }
 
       const placePath = path.match(/^\/a\/([a-z0-9-]+)\/p\/([0-9a-f-]{8,})$/i);

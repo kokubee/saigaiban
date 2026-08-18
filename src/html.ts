@@ -223,32 +223,73 @@ export function renderHome(
   meta: BoardMeta,
   measurementId?: string | null,
   selectedPref?: string | null,
+  selectedRegion?: string | null,
 ): string {
   const victimUrl = officialVictimUrl(origin);
-  const byPref = new Map<string, typeof meta.areas>();
-  for (const area of meta.areas) {
-    const key = area.prefCode || "00";
-    const list = byPref.get(key) || [];
-    list.push(area);
-    byPref.set(key, list);
+  const hasRegions = meta.areas.some((area) => Boolean(area.region?.id));
+  let activeAreas: typeof meta.areas = [];
+  let tabs = "";
+  let selectionLabel = "都道府県";
+  let activeGroupLabel = "";
+
+  if (hasRegions) {
+    const byRegion = new Map<string, { id: string; label: string; order: number; areas: typeof meta.areas }>();
+    for (const area of meta.areas) {
+      const region = area.region;
+      const key = region?.id || "__other";
+      const current = byRegion.get(key) || {
+        id: key,
+        label: region?.label || "その他の地域",
+        order: region?.order ?? Number.MAX_SAFE_INTEGER,
+        areas: [],
+      };
+      current.areas.push(area);
+      byRegion.set(key, current);
+    }
+    const groups = [...byRegion.values()].sort((a, b) => a.order - b.order || a.label.localeCompare(b.label, "ja"));
+    const activeId = groups.some((group) => group.id === selectedRegion)
+      ? String(selectedRegion)
+      : groups[0]?.id || "";
+    activeGroupLabel = groups.find((group) => group.id === activeId)?.label || "地域";
+    activeAreas = (groups.find((group) => group.id === activeId)?.areas || [])
+      .slice()
+      .sort((a, b) => a.nameJa.localeCompare(b.nameJa, "ja"));
+    selectionLabel = "地域";
+    tabs = groups.length
+      ? `<nav class="area-tabs" aria-label="地域">${groups
+          .map((group) => {
+            const current = group.id === activeId ? ` aria-current="page"` : "";
+            return `<a class="area-tab" href="/?region=${encodeURIComponent(group.id)}"${current}>${escapeHtml(group.label)}</a>`;
+          })
+          .join("")}</nav>`
+      : "";
+  } else {
+    const byPref = new Map<string, typeof meta.areas>();
+    for (const area of meta.areas) {
+      const key = area.prefCode || "00";
+      const list = byPref.get(key) || [];
+      list.push(area);
+      byPref.set(key, list);
+    }
+    const groups = [...byPref.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    const activeCode = groups.some(([code]) => code === selectedPref)
+      ? String(selectedPref)
+      : groups[0]?.[0] || "";
+    activeGroupLabel = prefName(activeCode);
+    activeAreas = (groups.find(([code]) => code === activeCode)?.[1] || [])
+      .slice()
+      .sort((a, b) => a.nameJa.localeCompare(b.nameJa, "ja"));
+    tabs = groups.length
+      ? `<nav class="area-tabs" aria-label="都道府県">${groups
+          .map(([code]) => {
+            const current = code === activeCode ? ` aria-current="page"` : "";
+            return `<a class="area-tab" href="/?pref=${encodeURIComponent(code)}"${current}>${escapeHtml(prefName(code))}</a>`;
+          })
+          .join("")}</nav>`
+      : "";
   }
-  const groups = [...byPref.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  const activeCode = groups.some(([code]) => code === selectedPref)
-    ? String(selectedPref)
-    : groups[0]?.[0] || "";
-  const activeAreas = (groups.find(([code]) => code === activeCode)?.[1] || [])
-    .slice()
-    .sort((a, b) => a.nameJa.localeCompare(b.nameJa, "ja"));
-  const tabs = groups.length
-    ? `<nav class="area-tabs" aria-label="都道府県">${groups
-        .map(([code]) => {
-          const current = code === activeCode ? ` aria-current="page"` : "";
-          return `<a class="area-tab" href="/?pref=${encodeURIComponent(code)}"${current}>${escapeHtml(prefName(code))}</a>`;
-        })
-        .join("")}</nav>`
-    : "";
   const towns = activeAreas.length
-    ? `<h2 class="pref">${escapeHtml(prefName(activeCode))}の市区町村</h2><div class="cards towns">${activeAreas
+    ? `<h2 class="pref">${escapeHtml(activeGroupLabel)}の市区町村</h2><div class="cards towns">${activeAreas
         .map(
           (a) => `<a class="card" href="/a/${escapeHtml(a.slug)}"><h3>${escapeHtml(a.nameJa)}</h3><p class="note">市区町村ページで場所一覧を開く</p></a>`,
         )
@@ -263,7 +304,7 @@ export function renderHome(
       <nav><a href="/">災害板</a><a href="/about">この板について</a><a href="${escapeHtml(victimUrl)}">OpenNavi（被災者向け）</a></nav>
       <h1>災害板</h1>
       <p class="lead">${escapeHtml(meta.disaster.label)}について、場所ごとの「いまどうか」を書く板です。匿名の雑談スレではありません。</p>
-      <p class="note">まず都道府県と市区町村を選びます。場所一覧と投稿は市区町村ページを開いた時だけ読み込みます。自治体・インフラの公式情報は <a href="${escapeHtml(victimUrl)}">OpenNaviの被災者向け入口</a> へ。</p>
+      <p class="note">まず${selectionLabel}と市区町村を選びます。場所一覧と投稿は市区町村ページを開いた時だけ読み込みます。自治体・インフラの公式情報は <a href="${escapeHtml(victimUrl)}">OpenNaviの被災者向け入口</a> へ。</p>
       <section class="support-card external-entry" aria-labelledby="kumamoto-entry-title">
         <h2 id="kumamoto-entry-title">熊本の情報・支援先</h2>
         <p>熊本の被災者向け情報は専用ナビに集約しています。支援する方はOpenNaviの支援先ページから熊本を選んでください。</p>
