@@ -7,7 +7,7 @@ function dayBucket(now: number): string {
 export async function shortIpHmac(ip: string, secretKey?: string, now = Date.now()): Promise<string | null> {
   const secret = String(secretKey || "").trim();
   const value = String(ip || "").trim();
-  if (!secret || !value) return null;
+  if (!rateLimitConfigured(secret) || !value) return null;
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),

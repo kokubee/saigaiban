@@ -36,8 +36,10 @@ function asReport(row: Report & { prefer_maps?: number | boolean; role?: string;
   const moderation: ReportModerationStatus = row.moderation_status === "hidden" ? "hidden" : "visible";
   const evidence = reportEvidence(row.created_at, role);
   evidence.review = review;
+  const cleaned = cleanNote(row.note);
   return {
     ...row,
+    note: cleaned.error ? null : cleaned.note,
     role,
     prefer_maps: Boolean(row.prefer_maps),
     moderation_status: moderation,

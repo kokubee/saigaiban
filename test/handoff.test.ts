@@ -182,3 +182,24 @@ test("handoff endpoint is read-only, CORS-enabled, and area-scoped", async () =>
     globalThis.fetch = originalFetch;
   }
 });
+
+test("handoff 5xx responses are not publicly cached", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const requestUrl = typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
+    if (requestUrl.includes("/api/board/meta")) return new Response(JSON.stringify(meta), { headers: { "content-type": "application/json" } });
+    if (requestUrl.includes("/api/board/places?")) throw new Error("UPSTREAM_FAILURE");
+    throw new Error(`unexpected fetch: ${requestUrl}`);
+  };
+  try {
+    const response = await worker.fetch(new Request("https://saigaiban.com/api/opennavi/v1/handoff/mobara"), {
+      OPENNAVI_ORIGIN: "https://opennavi.org",
+      SITE_ORIGIN: "https://saigaiban.com",
+      DB: {},
+    } as unknown as Env);
+    assert.equal(response.status, 502);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

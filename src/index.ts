@@ -170,13 +170,12 @@ export default {
       }
 
       return html(renderNotFound(site, measurementId), 404);
-    } catch (error) {
+    } catch {
       if (handoffPath) {
         return handoffJson({ ok: false, error: "引き継ぎデータを取得できません。" }, 502);
       }
-      const message = error instanceof Error ? error.message : "error";
       return html(
-        `<!doctype html><meta charset="utf-8"><title>災害板</title><p>いま板を開けません。公式ハブを見てください。</p><p><a href="${officialVictimUrl(origin)}">OpenNavi（被災者向け）</a></p><!-- ${message.replace(/</g, "")} -->`,
+        `<!doctype html><meta charset="utf-8"><title>災害板</title><p>いま板を開けません。公式ハブを見てください。</p><p><a href="${officialVictimUrl(origin)}">OpenNavi（被災者向け）</a></p>`,
         502,
       );
     }
@@ -349,7 +348,7 @@ function redirect(site: string, dest: string, err: string): Response {
   return Response.redirect(u.toString(), 303);
 }
 
-function html(body: string, status = 200, cache = "public, max-age=60"): Response {
+function html(body: string, status = 200, cache = status >= 500 ? "no-store" : "public, max-age=60"): Response {
   return new Response(body, {
     status,
     headers: {
@@ -386,14 +385,14 @@ function handoffOptions(): Response {
 function handoffJson(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: handoffHeaders(),
+    headers: handoffHeaders(status),
   });
 }
 
-function handoffHeaders(): HeadersInit {
+function handoffHeaders(status = 200): HeadersInit {
   return {
     "content-type": "application/json; charset=utf-8",
-    "cache-control": "public, max-age=60, stale-while-revalidate=300",
+    "cache-control": status >= 500 ? "no-store" : "public, max-age=60, stale-while-revalidate=300",
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET, OPTIONS",
     "access-control-allow-headers": "Content-Type",

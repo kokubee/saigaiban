@@ -6,7 +6,7 @@ import { activityWindowLabel, escapeHtml, gaSnippet, renderHome, renderLlms, ren
 import { categoryDescription, categoryLabel, isShelter, normalizePlaceCategory } from "../src/labels.ts";
 import { googleMapsSearchUrl } from "../src/maps.ts";
 import { officialHubUrl, officialVictimUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
-import { cleanNote, flagReport, formatWhen, moderateReport, parseFlagReason, parseModerationAction, parseVerdict, resolvePost } from "../src/reports.ts";
+import { cleanNote, flagReport, formatWhen, latestByPlaces, moderateReport, parseFlagReason, parseModerationAction, parseVerdict, resolvePost } from "../src/reports.ts";
 import { publicPostingAreas, publicPostingEnabled, publicPostingEnabledForArea, publicPostingMode } from "../src/posting.ts";
 import { purgeExpiredIpHashes, rateLimitConfigured, shortIpHmac } from "../src/rate-limit.ts";
 import { reportRequestHeadersAllowed } from "../src/request.ts";
@@ -196,6 +196,7 @@ test("rate-limit identity is a rotating HMAC and short secret is required", asyn
   assert.equal(rateLimitConfigured("short"), false);
   assert.equal(rateLimitConfigured("12345678901234567890123456789012"), true);
   assert.equal(await shortIpHmac("192.0.2.1"), null);
+  assert.equal(await shortIpHmac("192.0.2.1", "short"), null);
   const secret = "12345678901234567890123456789012";
   const today = await shortIpHmac("192.0.2.1", secret, Date.parse("2026-08-16T12:00:00Z"));
   const tomorrow = await shortIpHmac("192.0.2.1", secret, Date.parse("2026-08-17T12:00:00Z"));
@@ -212,6 +213,59 @@ test("rate-limit identity is a rotating HMAC and short secret is required", asyn
   await purgeExpiredIpHashes(db as never);
   assert.match(purgeSql, /SET ip_hash = NULL/);
   assert.match(purgeSql, /24 hours/);
+});
+
+test("stored report notes are sanitized before public projection", async () => {
+  const db = {
+    prepare() {
+      return {
+        bind() {
+          return {
+            all: async () => ({ results: [{
+              id: "report-1",
+              place_id: "place-1",
+              area: "mobara",
+              seed_key: "spot:conv:mobara:店",
+              verdict: "open",
+              note: "電話 09012345678",
+              created_at: "2026-08-18T00:00:00Z",
+              role: "visitor",
+              prefer_maps: 0,
+              moderation_status: null,
+              review_status: null,
+            }] }),
+          };
+        },
+      };
+    },
+  };
+  const summaries = await latestByPlaces(db as unknown as D1Database, ["place-1"]);
+  assert.equal(summaries.get("place-1")?.latest?.note, null);
+});
+
+test("public 5xx responses do not disclose internals or advertise shared caching", async () => {
+  const originalFetch = globalThis.fetch;
+  const meta = { disaster: { id: "r8", label: "テスト災害" }, areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" }] };
+  const place = { id: "place-1", seed_key: "spot:conv:mobara:店", name: "店", area: "mobara", category: "conv", lat: null, lng: null, address: null, source: "test", data_basis_date: null, identity_only: true, maps_url: "" };
+  globalThis.fetch = async (input) => {
+    const requestUrl = typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
+    if (requestUrl.includes("/api/board/meta")) return new Response(JSON.stringify(meta), { headers: { "content-type": "application/json" } });
+    if (requestUrl.includes("/api/board/places?")) return new Response(JSON.stringify({ disaster_id: "r8", generated_at: "2026-08-18T00:00:00Z", next_cursor: null, places: [place] }), { headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({ statuses: [] }), { headers: { "content-type": "application/json" } });
+  };
+  try {
+    const response = await worker.fetch(new Request("https://saigaiban.com/a/mobara"), {
+      OPENNAVI_ORIGIN: "https://opennavi.org",
+      SITE_ORIGIN: "https://saigaiban.com",
+      DB: { prepare() { throw new Error("INTERNAL_D1_SCHEMA_SECRET"); } },
+    } as unknown as Env);
+    const body = await response.text();
+    assert.equal(response.status, 502);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.doesNotMatch(body, /INTERNAL_D1_SCHEMA_SECRET/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("place page hides the report form while public posting is closed", () => {
