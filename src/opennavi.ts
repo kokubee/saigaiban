@@ -3,6 +3,7 @@ import { getCachedJson, publicCacheMode, type PublicCacheMode } from "./cache.ts
 import { normalizePlaceCategory } from "./labels.ts";
 
 export const DEFAULT_OPENNAVI = "https://opennavi.org";
+export const OPENNAVI_LINE_URL = "https://lin.ee/U9HwdQ1";
 export const KUMAMOTO_RESIDENT_SUPPORT = "https://kumamoto-shien.jp/";
 export const KUMAMOTO_ROAD_MAP = "https://www.mlit.go.jp/road/saigai/r8kumamoto/index.html";
 export const KUMAMOTO_BODIK = "https://odcs.bodik.jp/kumamoto-r8/";

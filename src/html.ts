@@ -1,6 +1,6 @@
 import { CATEGORY_FILTERS, categoryDescription, categoryLabel, isShelter, isShopLike, isKnownCategory, prefName } from "./labels.ts";
 import { googleMapsSearchUrl } from "./maps.ts";
-import { DEFAULT_OPENNAVI, KUMAMOTO_BODIK, KUMAMOTO_RESIDENT_SUPPORT, KUMAMOTO_ROAD_MAP, officialHubUrl, officialSupportUrl, officialVictimUrl } from "./opennavi.ts";
+import { DEFAULT_OPENNAVI, KUMAMOTO_BODIK, KUMAMOTO_RESIDENT_SUPPORT, KUMAMOTO_ROAD_MAP, OPENNAVI_LINE_URL, officialHubUrl, officialSupportUrl, officialVictimUrl } from "./opennavi.ts";
 import { evidenceLabel } from "./evidence.ts";
 import { VERDICT_LABEL, VISITOR_VERDICTS, formatWhen } from "./reports.ts";
 import { supportEventCategoryLabel, supportEventFreshnessLabel, supportEventStatusLabel } from "./support-events.ts";
@@ -131,6 +131,7 @@ nav a{margin-right:0}
 .foot{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:.85rem}.foot a{color:var(--accent)}
 .mobile-nav{display:none}
 .mobile-nav svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mobile-nav svg.line-icon{fill:currentColor;stroke:none}
 .mobile-nav-label{font-size:.7rem;line-height:1.2;font-weight:800;white-space:nowrap}
 .analytics-consent{position:fixed;right:16px;bottom:16px;z-index:20;max-width:min(520px,calc(100vw - 32px));padding:14px 16px;border:1px solid #b9d6df;border-radius:16px;background:rgb(255 255 255 / 96%);box-shadow:0 18px 48px rgb(20 65 83 / 18%)}
 .analytics-consent p{margin:0 0 8px}.analytics-consent button{margin:0 6px 0 0}.analytics-consent a{font-size:.9rem}
@@ -157,6 +158,7 @@ nav a{margin-right:0}
   .mobile-nav a{display:flex;min-height:52px;align-items:center;justify-content:center;gap:4px;border-radius:12px;color:var(--muted);text-decoration:none;flex-direction:column;transition:background .2s ease,color .2s ease,transform .2s ease}
   .mobile-nav a:hover{background:var(--sky);color:var(--accent-strong);transform:translateY(-1px)}
   .mobile-nav a[aria-current="page"]{background:var(--accent);color:#fff;box-shadow:0 6px 14px rgb(8 86 98 / 18%)}
+  .mobile-nav a.mobile-nav-line{color:#06c755}
   .analytics-consent{bottom:calc(84px + env(safe-area-inset-bottom))}
 }
 `;
@@ -228,28 +230,30 @@ ${mobileNav(origin, opts.canonical)}
 </html>`;
 }
 
-function navIcon(kind: "home" | "shield" | "heart" | "info"): string {
+function navIcon(kind: "home" | "pin" | "shield" | "line"): string {
   const paths = {
     home: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-7h6v7"/>',
+    pin: '<path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
     shield: '<path d="M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="m9 12 2 2 4-4"/>',
-    heart: '<path d="M20.8 8.8c0 5.2-8.8 10.2-8.8 10.2S3.2 14 3.2 8.8A4.8 4.8 0 0 1 12 6.1a4.8 4.8 0 0 1 8.8 2.7Z"/>',
-    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>',
+    line: '<path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63h2.386c.346 0 .627.285.627.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63.346 0 .628.285.628.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.4.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>',
   } as const;
-  return `<svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">${paths[kind]}</svg>`;
+  const className = kind === "line" ? ' class="line-icon"' : "";
+  return `<svg${className} aria-hidden="true" viewBox="0 0 24 24" focusable="false">${paths[kind]}</svg>`;
 }
 
 function mobileNav(origin: string, canonical: string): string {
   const pathname = new URL(canonical).pathname.replace(/\/+$/, "") || "/";
   const areaSlug = pathname.match(/^(?:\/a|\/support\/tourism)\/([a-z0-9-]+)/i)?.[1];
+  const areaHref = areaSlug ? `/a/${encodeURIComponent(areaSlug)}` : "/#area-list";
   const official = officialVictimUrl(origin, areaSlug);
   const items = [
-    { href: "/", label: "ホーム", icon: "home" as const, current: pathname === "/" },
-    { href: official, label: "公式ハブ", icon: "shield" as const, current: false },
-    { href: "/support", label: "支援情報", icon: "heart" as const, current: pathname === "/support" || pathname.startsWith("/support/") },
-    { href: "/about", label: "この板", icon: "info" as const, current: pathname === "/about" },
+    { href: "/", label: "ホーム", icon: "home" as const, current: pathname === "/", external: false, className: "" },
+    { href: areaHref, label: "この地域", icon: "pin" as const, current: Boolean(areaSlug && pathname === `/a/${areaSlug}`), external: false, className: "" },
+    { href: official, label: "公式ハブ", icon: "shield" as const, current: false, external: true, className: "" },
+    { href: OPENNAVI_LINE_URL, label: "LINE", icon: "line" as const, current: false, external: true, className: "mobile-nav-line" },
   ];
   return `<nav class="mobile-nav" aria-label="主要メニュー">${items
-    .map((item) => `<a href="${escapeHtml(item.href)}"${item.current ? ' aria-current="page"' : ""}>${navIcon(item.icon)}<span class="mobile-nav-label">${item.label}</span></a>`)
+    .map((item) => `<a class="${item.className}" href="${escapeHtml(item.href)}"${item.current ? ' aria-current="page"' : ""}${item.external ? ' target="_blank" rel="noopener noreferrer"' : ""}>${navIcon(item.icon)}<span class="mobile-nav-label">${item.label}</span></a>`)
     .join("")}</nav>`;
 }
 
@@ -325,7 +329,7 @@ export function renderHome(
       : "";
   }
   const towns = activeAreas.length
-    ? `<h2 class="pref">${escapeHtml(activeGroupLabel)}の市区町村</h2><div class="cards towns">${activeAreas
+    ? `<h2 id="area-list" class="pref">${escapeHtml(activeGroupLabel)}の市区町村</h2><div class="cards towns">${activeAreas
         .map(
           (a) => `<a class="card" href="/a/${escapeHtml(a.slug)}"><h3>${escapeHtml(a.nameJa)}</h3><p class="note">市区町村ページで場所一覧を開く</p></a>`,
         )

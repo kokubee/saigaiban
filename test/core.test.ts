@@ -835,13 +835,15 @@ test("pages include a mobile PWA footer menu with area-aware official navigation
   };
   const home = renderHome("https://saigaiban.com", "https://opennavi.org", meta);
   assert.match(home, /<nav class="mobile-nav" aria-label="主要メニュー">/);
-  assert.match(home, /href="https:\/\/opennavi\.org\/#open-areas"/);
-  assert.match(home, /支援情報/);
+  assert.match(home, /href="\/#area-list"/);
+  assert.match(home, /href="https:\/\/lin\.ee\/U9HwdQ1"/);
+  assert.match(home, /この地域/);
   assert.match(home, /aria-current="page"/);
 
   const town = renderTown("https://saigaiban.com", "https://opennavi.org", meta, "mobara", [], false, new Map());
+  assert.match(town, /href="\/a\/mobara"/);
   assert.match(town, /href="https:\/\/opennavi\.org\/a\/mobara"/);
-  assert.match(town, /href="\/about"/);
+  assert.match(town, /LINE/);
 });
 
 test("support events require an HTTPS source and stale entries become review-only", async () => {
