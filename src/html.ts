@@ -7,6 +7,7 @@ import { supportEventCategoryLabel, supportEventFreshnessLabel, supportEventStat
 import { tourismAreaConfig } from "./tourism-areas.ts";
 import type { BoardMeta, BoardOfficialStatus, BoardPlace, PlaceSummary, Report, SupportEventQueryResult, TourismFetchResult } from "./types.ts";
 import { HANDOFF_SCHEMA, OPENNAVI_HANDOFF_PROFILE, OPENNAVI_PROTOCOL_NAME, OPENNAVI_PROTOCOL_VERSION, handoffApiUrl, legacyHandoffApiUrl } from "./protocol.ts";
+import { PWA_MANIFEST_PATH, PWA_OFFLINE_CLIENT_SCRIPT_PATH, PWA_OFFLINE_SAVE_SCRIPT_PATH, PWA_OFFLINE_SHELL_PATH } from "./pwa.ts";
 
 export function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -99,6 +100,8 @@ nav a{margin-right:0}
 .town-tools{position:relative;isolation:isolate;background:linear-gradient(135deg,#ffffff 0%,#e4f5f4 58%,#fff2cc 100%);border:1px solid #b8d9dc;border-radius:20px;padding:20px;margin:28px 0 18px;box-shadow:0 18px 38px rgb(47 111 122 / 12%)}
 .town-tools::after{content:"";position:absolute;inset:auto 18px 0 auto;width:86px;height:5px;border-radius:99px;background:#e8896d;opacity:.85}
 .town-tools h2{margin:0 0 10px;font-size:1.1rem}
+.offline-tools{margin:18px 0;padding:16px 18px;border:1px solid #b8d9dc;border-radius:16px;background:linear-gradient(145deg,#f5fffb 0%,#eef8ff 100%);box-shadow:0 10px 26px rgb(44 84 100 / 8%)}
+.offline-tools h2{margin:0 0 8px;font-size:1.05rem}.offline-tools button{margin-right:8px}.offline-status{display:block;min-height:1.7em;margin-top:8px;color:var(--muted);font-size:.9rem}
 .category-filters{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 16px}
 .category-filter{display:inline-block;border:1px solid #b9d5df;border-radius:999px;background:rgb(255 255 255 / 80%);padding:7px 12px;text-decoration:none;transition:transform .2s ease,background .2s ease,border-color .2s ease}
 .category-filter:hover{transform:translateY(-1px);background:var(--sky);border-color:#86b9c8}
@@ -192,6 +195,7 @@ function page(opts: {
   body: string;
   measurementId?: string | null;
   origin?: string;
+  scripts?: string[];
 }): string {
   const site = new URL(opts.canonical).origin;
   const origin = opts.origin || DEFAULT_OPENNAVI;
@@ -203,6 +207,8 @@ function page(opts: {
 <title>${escapeHtml(opts.title)}</title>
 <meta name="description" content="${escapeHtml(opts.description)}">
 <link rel="canonical" href="${escapeHtml(opts.canonical)}">
+<link rel="manifest" href="${PWA_MANIFEST_PATH}">
+<meta name="theme-color" content="#0f5c4c">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="災害板">
 <meta property="og:title" content="${escapeHtml(opts.title)}">
@@ -220,7 +226,7 @@ function page(opts: {
     ],
   })}</script>
 <style>${CSS}</style>
-${gaSnippet(opts.measurementId)}</head>
+${gaSnippet(opts.measurementId)}${(opts.scripts || []).map((src) => `<script src="${escapeHtml(src)}" defer></script>`).join("")}</head>
 <body>
 <div class="banner">ここは公式の窓口ではありません。場所の営業や開設は、地図と公式ハブで確認してください。</div>
 <aside id="analytics-consent" class="analytics-consent" hidden><p>アクセス解析（Google Analytics）を許可しますか？拒否しても災害情報は閲覧できます。</p><button type="button" data-analytics-allow>許可する</button><button type="button" data-analytics-deny>許可しない</button> <a href="/legal#privacy">詳しく見る</a></aside>
@@ -439,16 +445,39 @@ export function renderTown(
     canonical: `${site}/a/${slug}`,
     origin,
     measurementId,
+    scripts: [PWA_OFFLINE_SAVE_SCRIPT_PATH],
     body: `
       <nav><a href="/">災害板</a><a href="/about">この板について</a><a href="${escapeHtml(officialHubUrl(origin, slug))}">${escapeHtml(area.nameJa)}の公式ハブ</a></nav>
       <h1>${escapeHtml(area.nameJa)}の災害板</h1>
       <p class="lead">${allowPosting ? "場所の正体に、「いまどうだったか」を書けます。" : "場所ごとのこれまでの報告を確認できます。"} 投稿は見た時点の話で、公式ではありません。店の営業は地図、避難所の開設は公式ハブで確認してください。</p>
       ${tools}
+      ${offlineTools(slug, area.nameJa)}
       ${officialOnly}
       ${renderSupportEvents(origin, area.nameJa, supportEvents)}
       ${sections || `<p class="note">条件に合う場所がありません。カテゴリを戻すか、検索語を短くしてみてください。</p>`}
       ${footer(origin, meta, slug)}
     `,
+  });
+}
+
+function offlineTools(slug: string, areaName: string): string {
+  return `<section class="offline-tools" aria-labelledby="offline-tools-title">
+    <h2 id="offline-tools-title">通信がないときに備える</h2>
+    <p class="note">${escapeHtml(areaName)}の公開場所カードを端末に明示保存できます。保存した情報は読み取り専用で、現在の営業・開設・安全を保証しません。</p>
+    <button type="button" data-offline-save data-area-slug="${escapeHtml(slug)}">この地域を端末に保存</button>
+    <a href="/a/${escapeHtml(slug)}/offline">保存した情報を見る</a>
+    <span class="offline-status" data-offline-status="${escapeHtml(slug)}" role="status" aria-live="polite"></span>
+  </section>`;
+}
+
+export function renderOfflineShell(site: string): string {
+  return page({
+    title: "災害板 — 保存情報",
+    description: "端末に明示保存した市区町村の場所カードを、通信がないときに読み取るための画面です。",
+    canonical: `${site.replace(/\/+$/, "")}${PWA_OFFLINE_SHELL_PATH}`,
+    origin: DEFAULT_OPENNAVI,
+    scripts: [PWA_OFFLINE_CLIENT_SCRIPT_PATH],
+    body: `<main data-offline-root aria-live="polite"><h1>保存情報を読み込んでいます</h1><p class="lead">端末に保存した情報を確認しています。</p></main>`,
   });
 }
 
@@ -941,6 +970,7 @@ export function renderLlms(site: string, origin: string): string {
 - 未確認、住民報告、店側の自己申告、古い可能性の区別
 - 掲載元の公式URLと確認日時がある支援イベント（公開設定時）
 - OpenNaviの被災者向け公式ハブへの導線
+- 利用者が明示保存した地域を通信断中に読むための読み取り専用PWAスナップショット
 - 利用規約・プライバシーポリシー・統計情報の利用方針
 
 ## しないこと
@@ -949,6 +979,7 @@ export function renderLlms(site: string, origin: string): string {
 - 地域全体の停電・断水を場所報告へ混在させない
 - 人探し、個人宅への直接支援、住所・電話・待ち合わせの仲介をしない
 - 未確認のSNS投稿を公式情報として掲載しない
+- 動的な町ページ、場所詳細、投稿APIをService Workerで自動保存しない
 
 ## 主要ページ
 - ${site}/ — 都道府県・市区町村の入口
@@ -957,6 +988,7 @@ export function renderLlms(site: string, origin: string): string {
 - ${site}/legal — 利用規約・プライバシー・統計情報の利用方針
 - ${site}/robots.txt — クロール方針
 - ${site}/sitemap.xml — 公開ページ一覧
+- ${site}/manifest.webmanifest — PWAの静的マニフェスト
 - ${site}/.well-known/opennavi.json — OpenNavi Protocolの対応情報
 - ${site}/api/opennavi/v1/handoff/{area-slug} — 現地サイトへ引き継ぐための公開読み取りAPI（続きは?cursor=...）
 - ${origin}/ — OpenNaviの被災者向け公式ハブ

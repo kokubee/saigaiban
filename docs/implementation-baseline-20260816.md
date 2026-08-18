@@ -98,7 +98,11 @@ P2では、`observedAt` と `confirmedAt` を同一時刻に自動設定しな�
 
 ### 災害板自身
 
-- Service Worker、IndexedDBの明示保存、印刷用スナップショットは未実装
+- Service Workerはmanifest・icon・オフラインシェルだけを明示的にキャッシュする
+- 市区町村ページのボタンから、IndexedDBへ型付き公開projectionを明示保存できる（最大2MiB／500場所）
+- `/a/<area-slug>/offline` は保存日時を表示する読み取り専用画面で、投稿本文・管理状態・secretは保存しない
+- オンライン再表示時は場所台帳の生成時刻と投稿公開リビジョンを照合し、更新・非表示変更があれば保存内容を出さない
+- 印刷用スナップショットは未実装
 - HTML公開レスポンスは既定 `public, max-age=60`
 - 場所詳細POSTは書き込み後にリダイレクトし、成功表示をクエリで返す
 - OpenNavi依存のCache APIは `PUBLIC_READ_CACHE=off` が既定
@@ -108,7 +112,7 @@ P2では、`observedAt` と `confirmedAt` を同一時刻に自動設定しな�
 ### OpenNaviとの境界
 
 - OpenNavi側にIndexedDBスナップショットがある場合も、災害板のService Worker自動キャッシュとは別物
-- 災害板がオフラインデータを持つ場合は、`OfflineOfficialAction[]` の型付きprojectionだけを保存する
+- 災害板がオフラインデータを持つ場合は、`src/offline.ts` の型付き公開projectionだけを保存する
 - `supportOfficial` のraw objectを再帰走査し、旅行予約や応援購入まで「公式」と表示しない
 
 ## 6. P0のテスト項目

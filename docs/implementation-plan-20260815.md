@@ -33,8 +33,8 @@
 - `created_at` は表示するが、カード単位の stale 判定・観測時刻・確認時刻がない
 - 投稿フォームが汎用的で、被災者が短時間で「今も使える／変わった」を送る説明が弱い
 - 停電・断水はOpenNavi公式板への導線が中心で、災害板側の関連導線が目立たない
-- オフライン時の読み取り、印刷、紙・電話へのフォールバックがない
-- OpenNavi障害時の期限付きスナップショットと、依存APIの状態表示を明確化する必要がある
+- オフライン時の読み取り、印刷、紙・電話へのフォールバックを明確化する
+- OpenNavi障害時は自動的に最後のHTMLを出さず、利用者が明示保存した期限付きスナップショットと依存APIの状態表示を使う
 - 立ち上げ、投稿受付、収束、次災害への切替が一人の記憶に依存している
 
 ### リポジトリ境界
@@ -53,7 +53,7 @@ P-1では、計画の各項目を `実装済み` / `部分実装` / `未実装` 
 | 場所報告 | `src/reports.ts`、D1 0001/0002 | 実装済み | stale・安全性・契約を強化 |
 | OpenNavi依存キャッシュ | `src/cache.ts` | 部分実装 | shadow書込・ETag・timeoutを検証 |
 | 公式ハブ／支援導線 | `src/opennavi.ts`、`src/html.ts` | 実装済み | 断水・停電導線を目立たせる |
-| オフライン地域スナップショット | 災害板には未実装 | 未実装 | shellとデータ保存の責務を分離して設計 |
+| オフライン地域スナップショット | `src/offline.ts`、`src/pwa.ts`、`/api/offline-snapshot/:slug` | 実装済み（明示保存型） | shell・IndexedDB・公開projection・更新検知を分離して維持 |
 | 公式・住民・鮮度の3軸 | 災害板の表示ラベルは単軸 | 部分実装 | P0でprojection契約を定義 |
 | 地域全体の停電・断水報告 | `place_id`前提のため未実装 | 未実装 | `lifeline_reports`を別設計。既存reportsへ混在させない |
 | 管理者actor監査 | 災害板は`moderation_audit`と固定actor IDを実装、OpenNaviは共有ADMIN_TOKEN | 部分実装／OpenNavi依存 | D1 migration適用とOpenNavi側の別承認を確認 |
@@ -262,18 +262,19 @@ P0残作業は、write ownershipの文書承認（OpenNavi側は別リポジト�
 
 ### P3 — オフライン・依存障害
 
-対象: `src/cache.ts`、`src/index.ts`、`src/html.ts`。OpenNavi側のIndexedDBスナップショットとは責務を分ける。
+対象: `src/cache.ts`、`src/index.ts`、`src/html.ts`、`src/offline.ts`、`src/pwa.ts`、`docs/pwa-offline-contract.md`。OpenNavi側のIndexedDBスナップショットとは責務を分ける。
 
 - Service Workerはshell／JS／CSS／iconだけをキャッシュし、災害板の町データを自動保存しない
 - 明示保存を導入する場合は、IndexedDBへ型付きの公開projectionだけを保存し、投稿・管理値・予約サービスURLを保存しない
-- OpenNaviの期限内スナップショットを、取得失敗時の読み取りフォールバックにする
+- OpenNaviの自動HTMLフォールバックは導入しない。利用者が明示保存したIndexedDBスナップショットだけを通信断時に表示する
 - 「いつ取得したデータか」「最新ではない」を明示
+- オンラインで保存画面を開いたときは、場所台帳の生成時刻と投稿公開リビジョンを照合し、更新・非表示変更があれば古い保存内容を表示しない
 - 投稿フォームは通信失敗時に完了扱いしない
 - OpenNaviが落ちた場合も公式ハブURLと固定の安全案内を返す
 - 印刷用の町ページ（公式リンク、緊急電話、時刻）を追加検討
 - `supportOfficial` のraw objectを再帰走査して「公式情報」と表示しない。`OfflineOfficialAction[]` の型付きprojectionを使い、旅行予約・応援購入等を除外する
 
-受入条件: OpenNavi 5xx、timeout、キャッシュなし、通信断をテストし、推測データを表示しない。通常閲覧だけでオフライン保存済みと誤表示しない。
+受入条件: OpenNavi 5xx、timeout、キャッシュなし、通信断、明示保存、2MiB／500場所上限、禁止キー除去、公開リビジョン不一致をテストし、推測データを表示しない。通常閲覧だけでオフライン保存済みと誤表示しない。
 
 ### P4 — 負荷・費用
 
@@ -339,7 +340,7 @@ P0残作業は、write ownershipの文書承認（OpenNavi側は別リポジト�
 2. `feat(ui):` 市区町村フィルタとカード表示（DB変更なし）
 3. `feat(report):` 観測時刻・鮮度・投稿制約（マイグレーションを含む場合は単独）
 4. `feat(lifeline):` `lifeline_reports` を追加する場合は、place reportsと別migration・別APIで単独
-5. `feat(resilience):` OpenNavi依存キャッシュと障害フォールバック
+5. `feat(resilience):` 明示保存PWA、公開リビジョン照合、OpenNavi依存キャッシュ
 6. `test:` E2E・負荷試験・次災害ドリル
 
 各段階で `npm test`、`npm run typecheck`、公開URLのリンク検査を行う。災害板側の変更をOpenNaviリポジトリへ混ぜない。

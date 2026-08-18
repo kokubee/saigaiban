@@ -10,6 +10,9 @@
 - 氏名、電話、URL、待ち合わせ、住所つきマッチングを受け付けません。
 - 地図は施設名などから作る検索 URL を使い、台帳の座標 URL をそのまま表示しません。Maps API キーは使いません。
 - 投稿・通報・管理 API の secret（Turnstile、rate-limit HMAC、モデレーション token など）を `vars`、Issue、PR、テストログへ書きません。
+- PWAは明示保存型です。動的HTML、場所詳細、API、POSTをService Workerで無差別にキャッシュしません。
+- オフライン保存は読み取り専用です。自由記述メモ、管理状態、secret、個人情報をIndexedDBへ保存しません。
+- オフライン表示には保存日時と「最新ではない可能性」を常に表示し、投稿や確認を完了扱いにしません。
 - Protocol の発見情報と handoff 契約を変える場合は、実装と [docs/opennavi-protocol-v1.md](docs/opennavi-protocol-v1.md) を同じ PR で更新します。
 
 ## 開発環境
@@ -45,6 +48,8 @@ npm run typecheck
 ```
 
 挙動を変える PR には、対応する `test/*.test.ts` の追加・更新を含めてください。CI は test と typecheck のみを実行し、フォーク先へ自動デプロイしません。
+
+PWA・IndexedDB・Service Workerを変更する場合は、[PWA / オフライン保存契約](docs/pwa-offline-contract.md)との整合を確認し、少なくとも保存サイズ、禁止キー、動的レスポンスの非キャッシュ、通信断時の読み取り専用表示をテストしてください。
 
 ## Pull Request
 

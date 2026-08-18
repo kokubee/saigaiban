@@ -4,6 +4,7 @@ import {
   renderLegal,
   renderLlms,
   renderNotFound,
+  renderOfflineShell,
   renderPlace,
   renderProtocol,
   renderRobots,
@@ -40,6 +41,8 @@ import { turnstileConfigured, turnstileHostnames, verifyTurnstile } from "./turn
 import { listSupportEvents, publicSupportEventsEnabled } from "./support-events.ts";
 import { buildHandoffDocument } from "./handoff.ts";
 import { buildProtocolDiscoveryDocument } from "./protocol.ts";
+import { buildOfflineSnapshot, OFFLINE_SNAPSHOT_MAX_PLACES, OfflineSnapshotError, type OfflineReportRevision } from "./offline.ts";
+import { PWA_ICON_PATH, PWA_MANIFEST_PATH, PWA_OFFLINE_CLIENT_SCRIPT_PATH, PWA_OFFLINE_SAVE_SCRIPT_PATH, PWA_OFFLINE_SHELL_PATH, PWA_SERVICE_WORKER_PATH, renderManifest, renderOfflineClient, renderOfflineSaveClient, renderPwaIcon, renderServiceWorker } from "./pwa.ts";
 import type { BoardPlace, Env, PlaceSummary } from "./types.ts";
 
 export default {
@@ -64,6 +67,24 @@ export default {
     try {
       if (path === "/robots.txt") {
         return text(renderRobots(site), "text/plain; charset=utf-8");
+      }
+      if (path === PWA_MANIFEST_PATH) {
+        return asset(renderManifest(site), "application/manifest+json; charset=utf-8", "public, max-age=300");
+      }
+      if (path === PWA_SERVICE_WORKER_PATH) {
+        return asset(renderServiceWorker(), "application/javascript; charset=utf-8", "no-cache");
+      }
+      if (path === PWA_OFFLINE_SHELL_PATH) {
+        return html(renderOfflineShell(site), 200, "public, max-age=31536000, immutable");
+      }
+      if (path === PWA_OFFLINE_CLIENT_SCRIPT_PATH) {
+        return asset(renderOfflineClient(), "application/javascript; charset=utf-8", "public, max-age=31536000, immutable");
+      }
+      if (path === PWA_OFFLINE_SAVE_SCRIPT_PATH) {
+        return asset(renderOfflineSaveClient(), "application/javascript; charset=utf-8", "public, max-age=31536000, immutable");
+      }
+      if (path === PWA_ICON_PATH) {
+        return asset(renderPwaIcon(), "image/svg+xml; charset=utf-8", "public, max-age=31536000, immutable");
       }
       if (path === "/llms.txt") {
         return text(renderLlms(site, origin), "text/plain; charset=utf-8");
@@ -104,6 +125,21 @@ export default {
       }
       if (path === "/protocol" || path === "/protocol/opennavi/v1") {
         return html(renderProtocol(site, origin, measurementId));
+      }
+
+      const offlinePagePath = path.match(/^\/a\/([a-z0-9-]+)\/offline$/i);
+      if (offlinePagePath) {
+        if (request.method !== "GET") return html("<!doctype html><meta charset=\"utf-8\"><title>災害板</title><p>GETだけ利用できます。</p>", 405, "no-store");
+        return html(renderOfflineShell(site), 200, "public, max-age=60");
+      }
+
+      const offlineSnapshotPath = path.match(/^\/api\/offline-snapshot\/([a-z0-9-]+)$/i);
+      if (offlineSnapshotPath) {
+        return handleOfflineSnapshot(request, env, site, origin, offlineSnapshotPath[1]);
+      }
+      const offlineRevisionPath = path.match(/^\/api\/offline-revision\/([a-z0-9-]+)$/i);
+      if (offlineRevisionPath) {
+        return handleOfflineRevision(request, env, origin, offlineRevisionPath[1]);
       }
 
       const earlyPlacePath = path.match(/^\/a\/([a-z0-9-]+)\/p\/([0-9a-f-]{8,})$/i);
@@ -184,6 +220,86 @@ export default {
     ctx.waitUntil(purgeExpiredIpHashes(env.DB));
   },
 };
+
+async function handleOfflineSnapshot(
+  request: Request,
+  env: Env,
+  site: string,
+  origin: string,
+  slug: string,
+): Promise<Response> {
+  if (request.method !== "GET") return offlineJson({ ok: false, error: "GETだけ利用できます。" }, 405);
+  try {
+    const meta = await fetchMeta(origin, env.PUBLIC_READ_CACHE);
+    const area = meta.areas.find((candidate) => candidate.slug === slug);
+    if (!area) return offlineJson({ ok: false, error: "地域が見つかりません。" }, 404);
+
+    const placesById = new Map<string, BoardPlace>();
+    let cursor: string | undefined;
+    let upstreamGeneratedAt = "";
+    for (let pageNumber = 0; pageNumber < 3; pageNumber += 1) {
+      const page = await fetchPlaces(origin, slug, { limit: 200, ...(cursor ? { cursor } : {}) }, env.PUBLIC_READ_CACHE);
+      upstreamGeneratedAt = page.generated_at || upstreamGeneratedAt;
+      for (const place of page.places) placesById.set(place.id, place);
+      if (placesById.size > OFFLINE_SNAPSHOT_MAX_PLACES) {
+        return offlineJson({ ok: false, error: `保存対象が多すぎます（${OFFLINE_SNAPSHOT_MAX_PLACES}件まで）` }, 413);
+      }
+      if (!page.next_cursor) break;
+      cursor = page.next_cursor;
+      if (pageNumber === 2) return offlineJson({ ok: false, error: `保存対象が多すぎます（${OFFLINE_SNAPSHOT_MAX_PLACES}件まで）` }, 413);
+    }
+
+    const places = [...placesById.values()];
+    const [summaries, officialStatuses, reportRevision] = await Promise.all([
+      latestByPlacesInChunks(env.DB, places.map((place) => place.id)),
+      fetchOfficialStatuses(origin, slug, [], env.PUBLIC_READ_CACHE),
+      publicReportRevision(env.DB, slug),
+    ]);
+    const snapshot = buildOfflineSnapshot({
+      site,
+      origin,
+      meta,
+      area,
+      places,
+      summaries,
+      officialStatuses,
+      reportRevision,
+      upstreamGeneratedAt: upstreamGeneratedAt || null,
+    });
+    return offlineJson(snapshot);
+  } catch (error) {
+    if (error instanceof OfflineSnapshotError) return offlineJson({ ok: false, error: error.message }, 413);
+    return offlineJson({ ok: false, error: "保存データを取得できません。通信できるときにもう一度お試しください。" }, 502);
+  }
+}
+
+async function handleOfflineRevision(request: Request, env: Env, origin: string, slug: string): Promise<Response> {
+  if (request.method !== "GET") return offlineJson({ ok: false, error: "GETだけ利用できます。" }, 405);
+  try {
+    const meta = await fetchMeta(origin, env.PUBLIC_READ_CACHE);
+    if (!meta.areas.some((area) => area.slug === slug)) return offlineJson({ ok: false, error: "地域が見つかりません。" }, 404);
+    const page = await fetchPlaces(origin, slug, { limit: 1 }, env.PUBLIC_READ_CACHE);
+    return offlineJson({
+      schema: "saigaiban.offline-revision/v1",
+      area: slug,
+      upstreamGeneratedAt: page.generated_at || null,
+      reportRevision: await publicReportRevision(env.DB, slug),
+    });
+  } catch {
+    return offlineJson({ ok: false, error: "更新確認ができません。" }, 502);
+  }
+}
+
+async function publicReportRevision(db: D1Database, area: string): Promise<OfflineReportRevision> {
+  const row = await db.prepare(
+    `SELECT MAX(created_at) AS latest_created_at, MAX(moderated_at) AS latest_moderated_at
+       FROM reports WHERE area = ?`,
+  ).bind(area).first<{ latest_created_at?: string | null; latest_moderated_at?: string | null }>();
+  return {
+    latestCreatedAt: row?.latest_created_at || null,
+    latestModeratedAt: row?.latest_moderated_at || null,
+  };
+}
 
 async function handleHandoff(
   request: Request,
@@ -358,6 +474,10 @@ function html(body: string, status = 200, cache = status >= 500 ? "no-store" : "
   });
 }
 
+function asset(body: string, type: string, cache: string): Response {
+  return new Response(body, { headers: { "content-type": type, "cache-control": cache, "x-content-type-options": "nosniff" } });
+}
+
 function text(body: string, type: string): Response {
   return new Response(body, {
     headers: { "content-type": type, "cache-control": "public, max-age=300" },
@@ -366,6 +486,17 @@ function text(body: string, type: string): Response {
 
 function json(body: unknown, status = 200): Response {
   return Response.json(body, { status });
+}
+
+function offlineJson(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+    },
+  });
 }
 
 function protocolJson(body: unknown): Response {
