@@ -1,7 +1,7 @@
 # 災害板（saigaiban）実施計画
 
 作成日: 2026-08-15／レビュー反映: 2026-08-16
-対象リポジトリ: `/Users/kokubee/code2026/saigaiban`  
+対象リポジトリ: このリポジトリ
 基準コミット: `382b1b7 feat: separate disaster board support navigation`  
 状態: 条件付き承認。P-1（現行実装との差分固定）は `docs/implementation-baseline-20260816.md` に記録済み。P0は証拠・鮮度projection、値検証付きテレメトリallowlist、既定OFFの投稿受付ゲート、読み取り専用表示、外部取得前のPOST拒否、fail-closedなTurnstileサーバー検証、短期HMACと識別子保持期限処理、shadowキャッシュ契約、通報・非表示・管理者確認経路まで実装済み。今回の追補で、公開状態／レビュー状態の独立更新、報告更新＋監査のD1 batch原子性、通報UIのHMAC準備ゲート、本文読み取りを含む外部取得timeout、SQLite日時比較、通報303復帰、地域単位の投稿許可リストを実装した。`0003` migrationの先行適用・実D1確認を完了し、`PUBLIC_POSTING_MODE=off` の読み取り専用Workerをデプロイ済み。投稿ONはwrite ownershipの承認、Turnstile/HMAC秘密の本番設定、実DBでのcron・moderation監査確認まで引き続きHOLDとする。
 

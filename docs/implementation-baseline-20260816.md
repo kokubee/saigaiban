@@ -1,7 +1,7 @@
 # 災害板 P-1 現行実装ベースライン
 
 確認日: 2026-08-16  
-対象: `/Users/kokubee/code2026/saigaiban` `main`
+対象: リポジトリルートの `main`
 コード基準: `382b1b7`
 計画更新: `66952a3`
 P0初回実装: `dc93a54`（証拠・鮮度projection、テレメトリallowlist）

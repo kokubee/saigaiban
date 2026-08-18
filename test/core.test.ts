@@ -726,10 +726,10 @@ test("escapeHtml", () => {
 test("gaSnippet emits gtag only for a valid measurement id", () => {
   assert.equal(gaSnippet(""), "");
   assert.equal(gaSnippet("UA-123"), "");
-  assert.equal(gaSnippet("G-4KQPS1LRHV\"><script>"), "");
-  const html = gaSnippet("G-4KQPS1LRHV");
-  assert.match(html, /googletagmanager\.com\/gtag\/js\?id=G-4KQPS1LRHV/);
-  assert.match(html, /gtag\('config', 'G-4KQPS1LRHV'\)/);
+  assert.equal(gaSnippet("G-TEST123456\"><script>"), "");
+  const html = gaSnippet("G-TEST123456");
+  assert.match(html, /googletagmanager\.com\/gtag\/js\?id=G-TEST123456/);
+  assert.match(html, /gtag\('config', 'G-TEST123456'\)/);
 });
 
 test("home page head includes GA4 when configured", () => {
@@ -740,10 +740,10 @@ test("home page head includes GA4 when configured", () => {
       disaster: { id: "r8-chiba-heavy-rain", label: "令和8年千葉県豪雨" },
       areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" }],
     },
-    "G-4KQPS1LRHV",
+    "G-TEST123456",
   );
-  assert.match(html, /id=G-4KQPS1LRHV/);
-  assert.match(html, /gtag\('config', 'G-4KQPS1LRHV'\)/);
+  assert.match(html, /id=G-TEST123456/);
+  assert.match(html, /gtag\('config', 'G-TEST123456'\)/);
   assert.match(html, /https:\/\/kumamoto-shien\.jp\//);
   assert.match(html, /https:\/\/www\.mlit\.go\.jp\/road\/saigai\/r8kumamoto\/index\.html/);
   assert.match(html, /https:\/\/odcs\.bodik\.jp\/kumamoto-r8\//);

@@ -6,6 +6,15 @@ OpenNavi の場所台帳から、町ごとの掲示板を立てる OSS です。
 - 公式ハブ: https://opennavi.org
 - この板は公式ではありません。場所カードは最初から「未確認」です。
 
+上記の公開 URL は参照デプロイです。フォークでは、API 例のホストを自分の `SITE_ORIGIN` に置き換えてください。
+
+## このリポジトリの位置づけ
+
+- 公式窓口ではありません。場所カードは「未確認」から始まります。
+- 場所マスターは OpenNavi API を読みます。災害板は自前の場所台帳を持ちません。
+- 人と人の仲介、氏名・電話・待ち合わせ、住所つきマッチングは実装しません。
+- 営業中・開設中・安全を災害板の判断として断定しません。
+
 ## 役割
 
 | | OpenNavi | 災害板 |
@@ -39,17 +48,100 @@ GET https://saigaiban.com/api/opennavi/v1/handoff/{area-slug}
 
 従来の `GET /api/handoff/{area-slug}` は互換エイリアスとして残します。新規連携はバージョン付きの `/api/opennavi/v1/handoff/{area-slug}` を使用してください。
 
-## 動かし方
+## 自分の Cloudflare で動かす
 
+設定のひな形は [wrangler.example.jsonc](wrangler.example.jsonc) です。本番の設定ファイルや D1 ID はコミットしません。
+本番設定・デプロイ手順は、公開ソースとは分離した非公開の ops リポジトリで管理します。
+
+1. 依存関係を入れ、設定を作成する。
+
+   ```bash
+   npm install
+   cp wrangler.example.jsonc wrangler.jsonc
+   ```
+
+2. `wrangler.jsonc` の `SITE_ORIGIN`、`PUBLIC_TURNSTILE_HOSTNAMES`、必要なら `routes` を自分の環境に書き換える。
+
+3. 自分の Cloudflare アカウントで D1 を作成し、出力された `database_id` を `wrangler.jsonc` に設定する。既存の本番 D1 ID は流用しない。
+
+   ```bash
+   npx wrangler d1 create saigaiban
+   ```
+
+4. ローカル migration を適用してテストする。
+
+   ```bash
+   npx wrangler d1 migrations apply saigaiban --local
+   ```
+
+   ```bash
+   npm test
+   ```
+
+   ```bash
+   npm run typecheck
+   ```
+
+5. 投稿を開く前に、Turnstile とレート制限 HMAC を必ず設定する。既定の `PUBLIC_POSTING_MODE=off` のまま起動し、地域 allowlist と実データを確認してから段階的に変更する。
+
+6. 本番 D1 へ migration を適用する場合は、デプロイ前に対象アカウント・DB・migration の内容を確認する。
+
+   ```bash
+   npx wrangler d1 migrations apply saigaiban --remote
+   ```
+
+7. テストと型チェックが通ったあとに、自分の Cloudflare アカウントへデプロイする。
+
+   ```bash
+   npm run deploy
+   ```
+
+`wrangler.jsonc` はローカル専用として `.gitignore` 済みです。フォーク先への自動デプロイは CI に含めていません。
+
+### 環境変数と秘密情報
+
+公開設定（`vars`）と secret を混ぜないでください。Turnstile secret、rate-limit HMAC、モデレーション token は `wrangler secret put` だけで設定し、リポジトリ・`vars`・Issue・PR に書きません。
+
+| 名前 | 種別 | 必須 | 用途 |
+|---|---|---|---|
+| `OPENNAVI_ORIGIN` | var | 推奨 | 場所台帳を読む OpenNavi origin |
+| `SITE_ORIGIN` | var | 推奨 | このフォークの公開 origin |
+| `PUBLIC_POSTING_MODE` | var | 任意 | `off` / `on` |
+| `PUBLIC_POSTING_AREAS` | var | 任意 | 投稿を許可する地域 slug（カンマ区切り） |
+| `PUBLIC_SUPPORT_EVENTS_MODE` | var | 任意 | 支援イベントカタログの公開モード |
+| `PUBLIC_READ_CACHE` | var | 任意 | `off` / `shadow` / `on` |
+| `PUBLIC_TURNSTILE_SITE_KEY` | var | 投稿時 | Turnstile 公開キー |
+| `PUBLIC_TURNSTILE_HOSTNAMES` | var | 投稿時 | Turnstile の許可ホスト名 |
+| `GA4_MEASUREMENT_ID` | var | 任意 | 自分が管理する GA4 測定 ID |
+| `TURNSTILE_SECRET_KEY` | **secret** | 投稿時 | Turnstile 検証 |
+| `RATE_LIMIT_HMAC_SECRET` | **secret** | 投稿・通報時 | IP の短期ハッシュとクールダウン |
+| `MODERATION_ADMIN_TOKEN` | **secret** | モデレーション時 | 管理 API の Bearer token |
+| `RAKUTEN_APPLICATION_ID` | **secret** | 任意 | 楽天トラベル連携 |
+| `RAKUTEN_ACCESS_KEY` | **secret** | 任意 | 楽天トラベル連携 |
+
+secret の設定例:
+
+```bash
+npx wrangler secret put TURNSTILE_SECRET_KEY
 ```
-npm install
-npm test
-npm run dev
+
+```bash
+npx wrangler secret put RATE_LIMIT_HMAC_SECRET
 ```
 
-本番は Cloudflare Worker です。`OPENNAVI_ORIGIN` の初期値は `https://opennavi.org` です。localhost には倒れません。
+```bash
+npx wrangler secret put MODERATION_ADMIN_TOKEN
+```
 
-計測は `GA4_MEASUREMENT_ID`（本番は `G-4KQPS1LRHV`）を HTML の head に載せます。未設定や不正な値のときはスクリプトを出しません。投稿本文・氏名・電話は送りません。
+```bash
+npx wrangler secret put RAKUTEN_APPLICATION_ID
+```
+
+```bash
+npx wrangler secret put RAKUTEN_ACCESS_KEY
+```
+
+ローカルでは `.dev.vars` を使えます。`.dev.vars` は gitignore 済みで、秘密をコミットしないでください。
 
 ## 投稿
 

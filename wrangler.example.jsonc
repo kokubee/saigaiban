@@ -1,0 +1,64 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "saigaiban",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+
+  // Forks can start with workers.dev. Add custom domains only after creating
+  // a zone in the same Cloudflare account.
+  "workers_dev": true,
+  "preview_urls": false,
+
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+
+  "vars": {
+    // OpenNavi's public board API (no trailing slash).
+    "OPENNAVI_ORIGIN": "https://opennavi.org",
+
+    // The public origin for this fork (no trailing slash).
+    "SITE_ORIGIN": "https://example.com",
+
+    // Optional GA4 measurement ID. Leave unset unless you own the property.
+    // "GA4_MEASUREMENT_ID": "G-XXXXXXXXXX",
+
+    // OpenNavi dependency cache: off | shadow | on.
+    "PUBLIC_READ_CACHE": "off",
+
+    // Reports are closed until Turnstile and rate-limit HMAC are configured.
+    "PUBLIC_POSTING_MODE": "off",
+    "PUBLIC_POSTING_AREAS": "",
+
+    // Curated support-event catalog is opt-in and should stay off until the
+    // migration and source review are complete.
+    "PUBLIC_SUPPORT_EVENTS_MODE": "off",
+
+    // Public Turnstile site key (the secret is configured with wrangler secret).
+    // "PUBLIC_TURNSTILE_SITE_KEY": "0x4...",
+    "PUBLIC_TURNSTILE_HOSTNAMES": "example.com"
+  },
+
+  // Uncomment and edit only when using custom domains.
+  // "routes": [
+  //   { "pattern": "example.com", "custom_domain": true },
+  //   { "pattern": "www.example.com", "custom_domain": true }
+  // ],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "saigaiban",
+      // Create a new D1 database in your own account. Never reuse a production
+      // database ID from another deployment.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Expire hashed IP identifiers hourly.
+  "triggers": {
+    "crons": ["0 * * * *"]
+  }
+}

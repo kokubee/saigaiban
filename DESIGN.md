@@ -141,4 +141,4 @@
 
 ## 10. ソースオブトゥルース
 
-デザインの実装は `/Users/kokubee/code2026/saigaiban/src/html.ts`、プロトコルの契約は `/Users/kokubee/code2026/saigaiban/src/protocol.ts` と `/Users/kokubee/code2026/saigaiban/src/handoff.ts` が正本です。この文書は画面の意図と再利用ルールを説明するもので、CSSの値を自動生成するファイルではありません。
+デザインの実装は [`src/html.ts`](src/html.ts)、プロトコルの契約は [`src/protocol.ts`](src/protocol.ts) と [`src/handoff.ts`](src/handoff.ts) が正本です。この文書は画面の意図と再利用ルールを説明するもので、CSSの値を自動生成するファイルではありません。

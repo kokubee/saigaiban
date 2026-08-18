@@ -1,8 +1,8 @@
 # 災害版 次回引き継ぎメモ
 
 確認日: 2026-08-17
-対象: `/Users/kokubee/code2026/saigaiban`  
-本番: https://saigaiban.com  
+対象: このリポジトリ
+本番: https://saigaiban.com
 本番Worker version: `2cf446a5-d9b3-4e7b-9adc-ba930213e231`
 ローカル基準コミット: `6187120 feat: enable curated support event catalog`
 
