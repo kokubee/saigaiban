@@ -1,6 +1,6 @@
 import { CATEGORY_FILTERS, categoryDescription, categoryLabel, isShelter, isShopLike, isKnownCategory, prefName } from "./labels.ts";
 import { googleMapsSearchUrl } from "./maps.ts";
-import { KUMAMOTO_BODIK, KUMAMOTO_RESIDENT_SUPPORT, KUMAMOTO_ROAD_MAP, officialHubUrl, officialSupportUrl, officialVictimUrl } from "./opennavi.ts";
+import { DEFAULT_OPENNAVI, KUMAMOTO_BODIK, KUMAMOTO_RESIDENT_SUPPORT, KUMAMOTO_ROAD_MAP, officialHubUrl, officialSupportUrl, officialVictimUrl } from "./opennavi.ts";
 import { evidenceLabel } from "./evidence.ts";
 import { VERDICT_LABEL, VISITOR_VERDICTS, formatWhen } from "./reports.ts";
 import { supportEventCategoryLabel, supportEventFreshnessLabel, supportEventStatusLabel } from "./support-events.ts";
@@ -129,6 +129,9 @@ nav a{margin-right:0}
 .table-wrap{overflow-x:auto;margin:14px 0}.table-wrap table{width:100%;min-width:760px;border-collapse:collapse;font-size:.85rem;line-height:1.55}.table-wrap th,.table-wrap td{padding:9px 10px;border:1px solid var(--line);vertical-align:top;text-align:left}.table-wrap thead th{white-space:nowrap;background:var(--sky)}.table-wrap tbody th{white-space:nowrap;background:#f4fafc}
 .legal-toc{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--paper);font-size:.9rem}.legal-toc a{text-decoration:none}.legal-toc a+a::before{content:"・";color:var(--muted);margin-right:8px}.legal-hold{margin:16px 0;padding:12px 14px;border-left:4px solid #d29b23;background:var(--sun);border-radius:0 12px 12px 0}
 .foot{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:.85rem}.foot a{color:var(--accent)}
+.mobile-nav{display:none}
+.mobile-nav svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mobile-nav-label{font-size:.7rem;line-height:1.2;font-weight:800;white-space:nowrap}
 .analytics-consent{position:fixed;right:16px;bottom:16px;z-index:20;max-width:min(520px,calc(100vw - 32px));padding:14px 16px;border:1px solid #b9d6df;border-radius:16px;background:rgb(255 255 255 / 96%);box-shadow:0 18px 48px rgb(20 65 83 / 18%)}
 .analytics-consent p{margin:0 0 8px}.analytics-consent button{margin:0 6px 0 0}.analytics-consent a{font-size:.9rem}
 @keyframes soft-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
@@ -140,7 +143,7 @@ nav a{margin-right:0}
   .cards .card:nth-child(2){animation-delay:.04s}.cards .card:nth-child(3){animation-delay:.08s}.cards .card:nth-child(4){animation-delay:.12s}
 }
 @media(max-width:719px){
-  .wrap{padding:18px 14px 56px}
+  .wrap{padding:18px 14px calc(112px + env(safe-area-inset-bottom))}
   .wrap>nav:first-child{margin-bottom:32px;gap:6px}
   .wrap>nav:first-child a{min-height:38px;padding:6px 10px;font-size:.9rem}
   .wrap>h1{font-size:clamp(2.15rem,11vw,3.25rem)}
@@ -150,6 +153,11 @@ nav a{margin-right:0}
   .cards{grid-template-columns:1fr}
   .card{padding:16px}
   .stay{grid-template-columns:80px 1fr}.stay img{width:80px;height:64px}
+  .mobile-nav{position:fixed;right:0;bottom:0;left:0;z-index:15;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:8px 10px calc(8px + env(safe-area-inset-bottom));border-top:1px solid rgb(200 220 232 / 90%);background:rgb(255 255 255 / 94%);box-shadow:0 -12px 30px rgb(27 77 98 / 12%);backdrop-filter:blur(18px)}
+  .mobile-nav a{display:flex;min-height:52px;align-items:center;justify-content:center;gap:4px;border-radius:12px;color:var(--muted);text-decoration:none;flex-direction:column;transition:background .2s ease,color .2s ease,transform .2s ease}
+  .mobile-nav a:hover{background:var(--sky);color:var(--accent-strong);transform:translateY(-1px)}
+  .mobile-nav a[aria-current="page"]{background:var(--accent);color:#fff;box-shadow:0 6px 14px rgb(8 86 98 / 18%)}
+  .analytics-consent{bottom:calc(84px + env(safe-area-inset-bottom))}
 }
 `;
 
@@ -181,13 +189,15 @@ function page(opts: {
   canonical: string;
   body: string;
   measurementId?: string | null;
+  origin?: string;
 }): string {
   const site = new URL(opts.canonical).origin;
+  const origin = opts.origin || DEFAULT_OPENNAVI;
   return `<!doctype html>
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${escapeHtml(opts.title)}</title>
 <meta name="description" content="${escapeHtml(opts.description)}">
 <link rel="canonical" href="${escapeHtml(opts.canonical)}">
@@ -213,8 +223,34 @@ ${gaSnippet(opts.measurementId)}</head>
 <div class="banner">ここは公式の窓口ではありません。場所の営業や開設は、地図と公式ハブで確認してください。</div>
 <aside id="analytics-consent" class="analytics-consent" hidden><p>アクセス解析（Google Analytics）を許可しますか？拒否しても災害情報は閲覧できます。</p><button type="button" data-analytics-allow>許可する</button><button type="button" data-analytics-deny>許可しない</button> <a href="/legal#privacy">詳しく見る</a></aside>
 <div class="wrap">${opts.body}</div>
+${mobileNav(origin, opts.canonical)}
 </body>
 </html>`;
+}
+
+function navIcon(kind: "home" | "shield" | "heart" | "info"): string {
+  const paths = {
+    home: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-7h6v7"/>',
+    shield: '<path d="M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="m9 12 2 2 4-4"/>',
+    heart: '<path d="M20.8 8.8c0 5.2-8.8 10.2-8.8 10.2S3.2 14 3.2 8.8A4.8 4.8 0 0 1 12 6.1a4.8 4.8 0 0 1 8.8 2.7Z"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>',
+  } as const;
+  return `<svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">${paths[kind]}</svg>`;
+}
+
+function mobileNav(origin: string, canonical: string): string {
+  const pathname = new URL(canonical).pathname.replace(/\/+$/, "") || "/";
+  const areaSlug = pathname.match(/^(?:\/a|\/support\/tourism)\/([a-z0-9-]+)/i)?.[1];
+  const official = officialVictimUrl(origin, areaSlug);
+  const items = [
+    { href: "/", label: "ホーム", icon: "home" as const, current: pathname === "/" },
+    { href: official, label: "公式ハブ", icon: "shield" as const, current: false },
+    { href: "/support", label: "支援情報", icon: "heart" as const, current: pathname === "/support" || pathname.startsWith("/support/") },
+    { href: "/about", label: "この板", icon: "info" as const, current: pathname === "/about" },
+  ];
+  return `<nav class="mobile-nav" aria-label="主要メニュー">${items
+    .map((item) => `<a href="${escapeHtml(item.href)}"${item.current ? ' aria-current="page"' : ""}>${navIcon(item.icon)}<span class="mobile-nav-label">${item.label}</span></a>`)
+    .join("")}</nav>`;
 }
 
 export function renderHome(
@@ -299,6 +335,7 @@ export function renderHome(
     title: "災害板 — 場所ごとのいまどうか",
     description: `${meta.disaster.label}の町ごとに、場所のカードを未確認から立てています。公式ではありません。`,
     canonical: `${site}/`,
+    origin,
     measurementId,
     body: `
       <nav><a href="/">災害板</a><a href="/about">この板について</a><a href="${escapeHtml(victimUrl)}">OpenNavi（被災者向け）</a></nav>
@@ -396,6 +433,7 @@ export function renderTown(
     title: `${area.nameJa}の災害板`,
     description: `${area.nameJa}の場所カード。投稿は見た時点の話です。公式ではありません。`,
     canonical: `${site}/a/${slug}`,
+    origin,
     measurementId,
     body: `
       <nav><a href="/">災害板</a><a href="/about">この板について</a><a href="${escapeHtml(officialHubUrl(origin, slug))}">${escapeHtml(area.nameJa)}の公式ハブ</a></nav>
@@ -656,6 +694,7 @@ export function renderPlace(
     title: `${place.name} — ${nameJa}の災害板`,
     description: `${place.name}のいまどうか。投稿は見た時点の話です。公式ではありません。`,
     canonical: `${site}/a/${slug}/p/${place.id}`,
+    origin,
     measurementId,
     body: `
       <nav><a href="/">災害板</a><a href="/a/${escapeHtml(slug)}">${escapeHtml(nameJa)}</a><a href="${escapeHtml(officialHubUrl(origin, slug))}">公式ハブ</a></nav>
@@ -677,6 +716,7 @@ export function renderAbout(site: string, origin: string, measurementId?: string
     title: "この板について — 災害板",
     description: "災害板は、平時から場所マスターを準備し、災害時にすぐ使えるようにしておく掲示板です。現地サイトの開設後は、そちらへ引き継ぎます。",
     canonical: `${site}/about`,
+    origin,
     measurementId,
     body: `
       <nav><a href="/">災害板</a><a href="/protocol/opennavi/v1">OpenNavi Protocol</a><a href="${escapeHtml(victimUrl)}">OpenNavi（被災者向け）</a></nav>
@@ -717,6 +757,7 @@ export function renderProtocol(site: string, origin: string, measurementId?: str
     title: "OpenNavi Protocol v1 — 災害板",
     description: "災害板から現地サイトへ場所マスターと公開済みの最新補足を引き継ぐための仕様です。",
     canonical: `${normalizedSite}/protocol/opennavi/v1`,
+    origin,
     measurementId,
     body: `
       <nav><a href="/">災害板</a><a href="/about">この板について</a><a href="${escapeHtml(discoveryUrl)}">機械向け発見情報</a></nav>
@@ -775,6 +816,7 @@ export function renderSupport(
     title: "被災地応援 — 災害板",
     description: "公式情報を確かめる窓口と、落ち着いてから地域を訪れて応援する宿泊導線です。",
     canonical: `${site}/support`,
+    origin,
     measurementId,
     body: `
       <nav><a href="/">災害板</a><a href="/about">この板について</a><a href="${escapeHtml(officialSupportUrl(origin))}">公式の支援窓口</a></nav>
@@ -831,6 +873,7 @@ export function renderTourism(
     title: `${area.nameJa}に泊まって応援 — 災害板`,
     description: `${area.nameJa}の宿を予約サービスで探し、訪れて地域を応援するための入口です。`,
     canonical: `${site}/support/tourism/${slug}`,
+    origin,
     measurementId,
     body: `
       <nav><a href="/">災害板</a><a href="/a/${escapeHtml(slug)}">${escapeHtml(area.nameJa)}の板</a><a href="${escapeHtml(officialHubUrl(origin, slug))}">公式ハブ</a><a href="${escapeHtml(officialSupportUrl(origin))}">支援者向け公式情報</a></nav>
@@ -875,7 +918,7 @@ export function renderLegal(
   const updated = "2026年8月16日";
   const researchSection = `<section id="research"><h2>統計情報と研究利用について</h2><p>災害版では、サービスの利用状況を個人との対応関係がない統計情報に加工し、運用報告、研究、論文、学会発表等で利用・公表することがあります。</p><p>対象となるのは、期間別・地域別・情報カテゴリ別の閲覧件数、利用件数、掲載データ件数、応答時間などの集計情報です。</p><p>IPアドレス、投稿本文、通報本文、検索語、個人単位の閲覧履歴、その他個人を識別または推測できる情報は公表しません。少人数の地域や時間帯については、他の区分とまとめるなど、個人が推測されない形に加工します。</p><p>個人単位の行動履歴、投稿本文、通報本文などを研究対象として利用する場合は、この統計利用とは分け、研究案件ごとに目的と対象データを説明して別途同意を取得します。拒否しても閲覧や通常利用を妨げません。</p></section>`;
   const body = `<nav><a href="/">災害板</a><a href="/about">この板について</a></nav><h1>利用規約・プライバシー・研究利用</h1><p class="lead">災害版の利用条件、情報の取扱い、研究利用を一つにまとめています。</p><p class="note">最終更新日：${updated}</p><nav class="legal-toc" aria-label="法務情報の目次"><a href="#terms">利用規約</a><a href="#privacy">プライバシー</a><a href="#research">研究利用</a></nav><section id="terms"><h2>利用規約</h2><p>災害情報の閲覧に同意を強制せず、投稿・通報の入口で利用条件を確認します。</p><p>災害版は見た時点の現地報告を扱う掲示板で、自治体、気象庁、消防、OpenNaviその他の公式発表や緊急通報の代わりではありません。投稿は未確認情報として扱われます。</p><p>氏名、電話番号、住所、現在地、待ち合わせ、病名などの個人情報、虚偽・なりすまし・差別・脅迫・救助を装う投稿、不正アクセスを禁止します。危険、個人情報、誤情報を含む投稿は非表示・削除することがあります。</p><p>外部サービスの運営者は災害版とは別です。安全確保のため投稿受付を変更・停止することがあります。本規約は日本法に準拠します。問い合わせはOpenNaviの<a href="${escapeHtml(officialVictimUrl(origin))}">お問い合わせ</a>から送信してください。</p></section><section id="privacy"><h2>プライバシーポリシー</h2><p>災害版運営が情報を取り扱います。自治体、社協、外部投稿サービス、OpenNaviとは別サービスです。運営者の正式な名称・住所は、本人からの請求に応じて遅滞なく開示します。</p><p>投稿・通報の本文、地域、時刻、同意した規約・ポリシーの版と日時、Turnstile検証結果、レート制限用のIP由来識別子、許可された解析情報を、投稿公開、確認、不正利用対策、問い合わせ対応、障害調査、安全な運用、サービス改善のために扱います。</p><h3>外部送信・委託</h3><div class="table-wrap"><table><thead><tr><th>送信先</th><th>送信情報</th><th>目的</th><th>保存・設定</th><th>停止・拒否</th></tr></thead><tbody><tr><th>災害版運営</th><td>現地報告・通報本文、地域、時刻、同意版・日時、Turnstile結果、IP由来識別子</td><td>投稿公開、通報対応、安全運用</td><td>Cloudflare基盤・運用ログ。目的に必要な期間だけ保存</td><td>投稿・通報を送信しない</td></tr><tr><th>Cloudflare, Inc.（Cloudflare）</th><td>IP、ブラウザ・通信メタデータ</td><td>ホスティング、配信、防御</td><td>Cloudflareの契約・ログ設定</td><td>各社設定に依存</td></tr><tr><th><a href="https://marketingplatform.google.com/about/analytics/terms/jp/" target="_blank" rel="noreferrer">Google LLC（Google Analytics）</a></th><td>許可後のページ閲覧、Cookie等の識別子</td><td>利用状況の把握と改善</td><td>同意後のみ。Google側の保持設定</td><td>同意バナーで拒否、Cookie削除</td></tr><tr><th>OpenNavi運営</th><td>災害版から公式ハブへ遷移した事実と通常のHTTPアクセス</td><td>公式情報への案内</td><td>OpenNavi側のポリシーに従う</td><td>遷移しない</td></tr></tbody></table></div><p>アクセス解析は初期状態で無効です。拒否しても閲覧を妨げません。各情報は利用目的に必要な期間だけ保存し、目的達成後または不要となった情報を削除・匿名化します。法令上保存が必要な情報は、その期間保持します。</p><p>個人情報の開示・訂正・削除・利用停止は、OpenNaviの<a href="${escapeHtml(officialVictimUrl(origin))}">お問い合わせ窓口</a>から請求してください。</p></section><section id="research"><h2>研究利用について</h2><p>研究・論文への利用は、サービス利用やアクセス解析とは別の任意同意です。この説明だけで包括的な研究同意を取得しません。</p><p>研究利用開始日は2026年8月16日（案件ごとの同意取得後）です。それ以前の投稿本文、Cloudflareアクセスログ、Google Analytics過去データ、Webhook・通報・確認履歴、IP由来識別子、その他の運用ログは研究利用へ転用しません。</p><p>研究案件ごとに対象、匿名化、公表範囲、保存期間、撤回方法を説明して同意を取得します。拒否しても閲覧や通常利用を妨げません。</p></section>`;
-  return page({ title: "利用規約・プライバシー・研究利用｜災害板", description: "災害版の利用規約、プライバシーポリシー、研究利用方針", canonical: `${site}/legal`, measurementId, body: `${body.replace(/<section id="research">[\s\S]*?<\/section>$/, researchSection).replace("統計情報と研究利用について", "統計情報の利用について")}${footer(origin, null)}` });
+  return page({ title: "利用規約・プライバシー・研究利用｜災害板", description: "災害版の利用規約、プライバシーポリシー、研究利用方針", canonical: `${site}/legal`, origin, measurementId, body: `${body.replace(/<section id="research">[\s\S]*?<\/section>$/, researchSection).replace("統計情報と研究利用について", "統計情報の利用について")}${footer(origin, null)}` });
 }
 
 export function renderRobots(site: string): string {

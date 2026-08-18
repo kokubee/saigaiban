@@ -828,6 +828,22 @@ test("public SEO assets describe the resident board without exposing APIs", () =
   assert.match(renderSitemap("https://saigaiban.com", ["mobara"]), /https:\/\/saigaiban\.com\/protocol\/opennavi\/v1/);
 });
 
+test("pages include a mobile PWA footer menu with area-aware official navigation", () => {
+  const meta = {
+    disaster: { id: "r8", label: "テスト災害" },
+    areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" as const }],
+  };
+  const home = renderHome("https://saigaiban.com", "https://opennavi.org", meta);
+  assert.match(home, /<nav class="mobile-nav" aria-label="主要メニュー">/);
+  assert.match(home, /href="https:\/\/opennavi\.org\/#open-areas"/);
+  assert.match(home, /支援情報/);
+  assert.match(home, /aria-current="page"/);
+
+  const town = renderTown("https://saigaiban.com", "https://opennavi.org", meta, "mobara", [], false, new Map());
+  assert.match(town, /href="https:\/\/opennavi\.org\/a\/mobara"/);
+  assert.match(town, /href="\/about"/);
+});
+
 test("support events require an HTTPS source and stale entries become review-only", async () => {
   const now = Date.parse("2026-08-16T00:00:00Z");
   const rawEvent = {
