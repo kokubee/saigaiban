@@ -6,7 +6,7 @@ import { activityWindowLabel, escapeHtml, gaSnippet, renderHome, renderLlms, ren
 import { categoryDescription, categoryLabel, isShelter, normalizePlaceCategory } from "../src/labels.ts";
 import { googleMapsSearchUrl } from "../src/maps.ts";
 import { officialHubUrl, officialVictimUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
-import { cleanNote, flagReport, moderateReport, parseFlagReason, parseModerationAction, parseVerdict, resolvePost } from "../src/reports.ts";
+import { cleanNote, flagReport, formatWhen, moderateReport, parseFlagReason, parseModerationAction, parseVerdict, resolvePost } from "../src/reports.ts";
 import { publicPostingAreas, publicPostingEnabled, publicPostingEnabledForArea, publicPostingMode } from "../src/posting.ts";
 import { purgeExpiredIpHashes, rateLimitConfigured, shortIpHmac } from "../src/rate-limit.ts";
 import { reportRequestHeadersAllowed } from "../src/request.ts";
@@ -861,6 +861,14 @@ test("verdict and note rules reject matching and contacts", () => {
   assert.match(cleanNote("09012345678").error || "", /電話/);
   assert.match(cleanNote("LINE IDはabc").error || "", /連絡先/);
   assert.match(cleanNote("駅前で待ち合わせ").error || "", /仲介/);
+  assert.match(cleanNote("鈴木さんがいました").error || "", /個人名/);
+  assert.match(cleanNote("山田さんに連絡してください").error || "", /連絡先/);
+  assert.match(cleanNote("個人名は書かないでください").error || "", /連絡先/);
+});
+
+test("report timestamps use an unambiguous Japanese date", () => {
+  assert.equal(formatWhen("2026-08-18T00:00:00.000Z"), "2026年08月18日 09:00ごろ");
+  assert.equal(formatWhen("not-a-date"), "");
 });
 
 test("owner can steer visitors to Google Maps without claiming official hours", () => {

@@ -44,6 +44,7 @@ GET https://saigaiban.com/api/handoff/{area-slug}
 - `area`: 市区町村の識別子と表示名
 - `places`: 場所マスターの公開projection
 - `places[].latestReport`: 公開済みで非表示になっていない最新報告だけ
+- `places[].latestReport.evidence`: `authority`、`review`、`freshness` の公開projection
 - `places[].reportCount`: その場所に紐づく公開報告の件数
 - `upstream.generatedAt`: 上流の場所APIの生成時刻
 - `pagination.nextCursor`: 続きがない場合は `null`
@@ -59,15 +60,18 @@ GET https://saigaiban.com/api/handoff/{area-slug}
 - 場所ID、名前、市区町村、カテゴリ
 - 公開された緯度・経度、住所、出典、データ基準日
 - 最新の公開報告の状態、短いメモ、投稿時刻、立場、証拠projection
+- `evidence.authority`: `resident` または `operator`。投稿者の立場を示すだけで、本人確認や公式性を示さない
+- `evidence.review`: 現行実装では `unknown`、`confirmed`、`disputed`。公開用の判定ラベルであり、生の `review_status` は返さない
+- `evidence.freshness`: `fresh`、`stale`、`expired`、`unknown`。投稿時刻から計算した鮮度であり、営業・開設・安全を保証しない
 
 含めないもの:
 
 - 電話番号、個人名、待ち合わせ、連絡先
-- 非表示報告、管理者用ID、レビュー内部値
+- 非表示報告、管理者用ID、生のレビュー内部値（`review_status`）
 - 台帳に含まれる座標入りの地図URL
 - OpenNaviや災害板の内部フィールド
 
-`authority`、`review`、`freshness` は別々の軸です。住民報告や店側の自己申告が管理者に確認されても、公式情報へ自動昇格しません。現地サイトは、自治体・事業者・社協などの一次情報を正本として表示します。
+`authority`、`review`、`freshness` は別々の軸です。`review` は公開projectionとして意図的に含めますが、住民報告や店側の自己申告が管理者に確認されても、公式情報へ自動昇格しません。現地サイトは、自治体・事業者・社協などの一次情報を正本として表示します。
 
 ## 互換性
 

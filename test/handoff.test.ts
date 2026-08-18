@@ -53,6 +53,38 @@ test("handoff document keeps the public identity boundary", () => {
   assert.equal("seed_key" in document.places[0], false);
 });
 
+test("handoff exposes evidence projection but not raw moderation fields", () => {
+  const latest = {
+    id: "report-1234",
+    place_id: place.id,
+    area: place.area,
+    seed_key: place.seed_key,
+    verdict: "open" as const,
+    note: "棚は少なかった",
+    created_at: "2026-08-18T00:00:00.000Z",
+    role: "visitor" as const,
+    prefer_maps: false,
+    moderation_status: "visible" as const,
+    review_status: "confirmed" as const,
+    evidence: { authority: "resident" as const, review: "confirmed" as const, freshness: "fresh" as const },
+  };
+  const document = buildHandoffDocument(
+    "https://saigaiban.com",
+    meta,
+    meta.areas[0],
+    [place],
+    new Map([[place.id, { latest, latestOwner: null, count: 1 }]]),
+    null,
+    null,
+    "2026-08-18T00:01:00.000Z",
+  );
+  const report = document.places[0].latestReport;
+  assert.ok(report);
+  assert.deepEqual(report.evidence, { authority: "resident", review: "confirmed", freshness: "fresh" });
+  assert.equal("review_status" in report, false);
+  assert.equal("moderation_status" in report, false);
+});
+
 test("well-known discovery describes the versioned protocol", () => {
   const document = buildProtocolDiscoveryDocument("https://saigaiban.com/", "https://opennavi.org/");
   assert.equal(document.schema, "opennavi.discovery/v1");

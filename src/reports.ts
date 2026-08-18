@@ -59,8 +59,15 @@ export function cleanNote(raw: unknown): { note: string | null; error?: string }
   if (/@/.test(note) || /line\s*id/i.test(note)) {
     return { note: null, error: "連絡先は書けません。" };
   }
-  if (/(待ち合わせ|迎えに|来てください|dm|マッチング|個人情報)/i.test(note)) {
+  if (/(連絡(?:してください|先|を)|電話して|dm|個人(?:情報|名))/i.test(note)) {
+    return { note: null, error: "連絡先は書けません。" };
+  }
+  if (/(待ち合わせ|迎えに|来てください|マッチング)/i.test(note)) {
     return { note: null, error: "人と会う約束や仲介の文は書けません。" };
+  }
+  // 完全な氏名判定はできないため、敬称つきの個人参照を保守的に拒否する。
+  if (/(?:[A-Za-z一-龥々]{1,20})(?:さん|様|氏|ちゃん|くん)(?:が|は|を|に|へ|と|の|、|。|$)/u.test(note)) {
+    return { note: null, error: "個人名・連絡先は書けません。" };
   }
   return { note };
 }
@@ -260,13 +267,15 @@ export async function moderateReport(
 export function formatWhen(iso: string): string {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return "";
-  const fmt = new Intl.DateTimeFormat("sv-SE", {
+  const parts = new Intl.DateTimeFormat("ja-JP", {
     timeZone: "Asia/Tokyo",
+    year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-  });
-  return `${fmt.format(new Date(ms)).replace(" ", " ")} ごろ`;
+  }).formatToParts(new Date(ms));
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.year}年${values.month}月${values.day}日 ${values.hour}:${values.minute}ごろ`;
 }
