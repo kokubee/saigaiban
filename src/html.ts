@@ -20,7 +20,7 @@ import { supportEventCategoryLabel, supportEventFreshnessLabel, supportEventStat
 import { tourismAreaConfig } from "./tourism-areas.ts";
 import type { BoardMeta, BoardOfficialStatus, BoardPlace, PlaceSummary, Report, SupportEventQueryResult, TourismFetchResult } from "./types.ts";
 import { HANDOFF_SCHEMA, OPENNAVI_HANDOFF_PROFILE, OPENNAVI_PROTOCOL_NAME, OPENNAVI_PROTOCOL_VERSION, handoffApiUrl, legacyHandoffApiUrl } from "./protocol.ts";
-import { PWA_MANIFEST_PATH, PWA_OFFLINE_CLIENT_SCRIPT_PATH, PWA_OFFLINE_SAVE_SCRIPT_PATH, PWA_OFFLINE_SHELL_PATH } from "./pwa.ts";
+import { PWA_ICON_PATH, PWA_MANIFEST_PATH, PWA_OFFLINE_CLIENT_SCRIPT_PATH, PWA_OFFLINE_SAVE_SCRIPT_PATH, PWA_OFFLINE_SHELL_PATH } from "./pwa.ts";
 
 export function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -222,6 +222,7 @@ function page(opts: {
 <title>${escapeHtml(opts.title)}</title>
 <meta name="description" content="${escapeHtml(opts.description)}">
 <link rel="canonical" href="${escapeHtml(opts.canonical)}">
+<link rel="icon" href="${site}${PWA_ICON_PATH}" type="image/svg+xml">
 <link rel="manifest" href="${PWA_MANIFEST_PATH}">
 <meta name="theme-color" content="#0f5c4c">
 <meta property="og:type" content="website">
@@ -229,10 +230,15 @@ function page(opts: {
 <meta property="og:title" content="${escapeHtml(opts.title)}">
 <meta property="og:description" content="${escapeHtml(opts.description)}">
 <meta property="og:url" content="${escapeHtml(opts.canonical)}">
+<meta property="og:image" content="${site}${PWA_ICON_PATH}">
+<meta property="og:image:alt" content="災害板">
+<meta property="og:image:type" content="image/svg+xml">
 <meta property="og:locale" content="ja_JP">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="${escapeHtml(opts.title)}">
 <meta name="twitter:description" content="${escapeHtml(opts.description)}">
+<meta name="twitter:image" content="${site}${PWA_ICON_PATH}">
+<meta name="twitter:image:alt" content="災害板">
 <script type="application/ld+json">${jsonForHtml({
     "@context": "https://schema.org",
     "@graph": [
@@ -993,7 +999,7 @@ export function renderLegal(
 }
 
 export function renderRobots(site: string): string {
-  return `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /health\nSitemap: ${site}/sitemap.xml\n`;
+  return `User-agent: *\nAllow: /\nDisallow: /api/\nAllow: /api/opennavi/\nDisallow: /health\nSitemap: ${site}/sitemap.xml\n`;
 }
 
 export function renderLlms(site: string, origin: string): string {

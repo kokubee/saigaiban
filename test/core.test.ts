@@ -893,11 +893,15 @@ test("public SEO assets describe the resident board without exposing APIs", () =
   });
   assert.match(html, /property="og:type" content="website"/);
   assert.match(html, /property="og:locale" content="ja_JP"/);
+  assert.match(html, /property="og:image" content="https:\/\/saigaiban\.com\/pwa\/icon\.svg"/);
+  assert.match(html, /rel="icon" href="https:\/\/saigaiban\.com\/pwa\/icon\.svg"/);
+  assert.match(html, /name="twitter:image" content="https:\/\/saigaiban\.com\/pwa\/icon\.svg"/);
   assert.match(html, /name="twitter:card" content="summary"/);
   const json = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)?.[1];
   assert.ok(json);
   assert.equal(JSON.parse(json)["@graph"][0]["@type"], "WebSite");
   assert.match(renderRobots("https://saigaiban.com"), /Disallow: \/api\//);
+  assert.match(renderRobots("https://saigaiban.com"), /Allow: \/api\/opennavi\//);
   assert.match(renderRobots("https://saigaiban.com"), /Disallow: \/health/);
   const llms = renderLlms("https://saigaiban.com", "https://opennavi.org");
   assert.match(llms, /場所カード/);
