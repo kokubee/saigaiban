@@ -1,4 +1,17 @@
-import { CATEGORY_FILTERS, categoryDescription, categoryLabel, isShelter, isShopLike, isKnownCategory, prefName } from "./labels.ts";
+import {
+  CATEGORY_FILTERS,
+  SHELTER_FLAG_FILTERS,
+  categoryDescription,
+  categoryLabel,
+  categoryLabelFromTaxonomy,
+  isShelter,
+  isShopLike,
+  isKnownCategoryFromTaxonomy,
+  isKnownPlaceFlag,
+  placeFlagLabel,
+  prefName,
+  shelterDesignationLabel,
+} from "./labels.ts";
 import { googleMapsSearchUrl } from "./maps.ts";
 import { DEFAULT_OPENNAVI, KUMAMOTO_BODIK, KUMAMOTO_RESIDENT_SUPPORT, KUMAMOTO_ROAD_MAP, OPENNAVI_LINE_URL, officialHubUrl, officialSupportUrl, officialVictimUrl } from "./opennavi.ts";
 import { evidenceLabel } from "./evidence.ts";
@@ -385,16 +398,20 @@ export function renderTown(
   searchQuery?: string,
   supportEvents: SupportEventQueryResult = { available: false, events: [] },
   officialStatuses: BoardOfficialStatus[] = [],
+  selectedFlag?: string,
 ): string {
   const area = meta.areas.find((a) => a.slug === slug);
   if (!area) return renderNotFound(site, measurementId);
-  const category = selectedCategory && isKnownCategory(selectedCategory) ? selectedCategory : "";
+  const taxonomy = meta.taxonomy;
+  const category = selectedCategory && isKnownCategoryFromTaxonomy(selectedCategory, taxonomy) ? selectedCategory : "";
+  const flag = selectedFlag && isKnownPlaceFlag(selectedFlag, taxonomy) ? selectedFlag : "";
   const query = String(searchQuery || "").trim().slice(0, 40);
   const normalizedQuery = query.toLocaleLowerCase("ja-JP");
   const categoryPlaces = category ? places.filter((place) => place.category === category) : places;
+  const flagPlaces = flag ? categoryPlaces.filter((place) => (place.flags || []).includes(flag)) : categoryPlaces;
   const filteredPlaces = normalizedQuery
-    ? categoryPlaces.filter((place) => [place.name, place.address || "", categoryLabel(place.category)].join(" ").toLocaleLowerCase("ja-JP").includes(normalizedQuery))
-    : categoryPlaces;
+    ? flagPlaces.filter((place) => [place.name, place.address || "", categoryLabelFromTaxonomy(place.category, taxonomy)].join(" ").toLocaleLowerCase("ja-JP").includes(normalizedQuery))
+    : flagPlaces;
   const orderedPlaces = [...filteredPlaces].sort((a, b) => comparePlaceActivity(a, b, summaries));
   const byCat = new Map<string, BoardPlace[]>();
   for (const place of orderedPlaces) {
@@ -403,29 +420,46 @@ export function renderTown(
     byCat.set(place.category, list);
   }
   const preview = showAll || Boolean(category || query) ? Infinity : 6;
-  const queryString = (nextCategory = category) => {
+  const queryString = (nextCategory = category, nextFlag = flag) => {
     const params = new URLSearchParams();
     if (nextCategory) params.set("category", nextCategory);
+    if (nextFlag) params.set("flag", nextFlag);
     if (query) params.set("q", query);
     return params.toString();
   };
   const primaryFilterIds = new Set(["conv", "gas", "food", "hinanjo"]);
-  const filterCategories = CATEGORY_FILTERS.filter(({ id }) => isKnownCategory(id) && (primaryFilterIds.has(id) || id === category || places.some((place) => place.category === id))).filter(({ label }, index, all) => all.findIndex((item) => item.label === label) === index);
-  const filterLinks = [`<a class="category-filter" href="/a/${escapeHtml(slug)}${queryString() ? `?${escapeHtml(queryString(""))}` : ""}"${category ? "" : " aria-current=\"page\""}>すべて</a>`, ...filterCategories.map(({ id, label }) => {
-    const qs = queryString(id);
-    return `<a class="category-filter" href="/a/${escapeHtml(slug)}?${escapeHtml(qs)}"${category === id ? " aria-current=\"page\"" : ""}>${escapeHtml(label)}</a>`;
-  })].join("");
+  const taxonomyCategories = (taxonomy?.categories || []).map(({ id, label }) => ({ id, label }));
+  const filterCategories = [...CATEGORY_FILTERS, ...taxonomyCategories.filter(({ id }) => !CATEGORY_FILTERS.some((item) => item.id === id))]
+    .filter(({ id }) => primaryFilterIds.has(id) || id === category || places.some((place) => place.category === id))
+    .filter(({ id }) => isKnownCategoryFromTaxonomy(id, taxonomy))
+    .filter(({ label }, index, all) => all.findIndex((item) => item.label === label) === index);
+  const shelterFlags = [...SHELTER_FLAG_FILTERS, ...(taxonomy?.flags || [])
+    .filter((flag) => flag.categories?.includes("hinanjo") && !SHELTER_FLAG_FILTERS.some((known) => known.id === flag.id))
+    .map(({ id, label }) => ({ id, label }))];
+  const filterLinks = [
+    `<a class="category-filter" href="/a/${escapeHtml(slug)}${queryString("", "") ? `?${escapeHtml(queryString("", ""))}` : ""}"${category || flag ? "" : " aria-current=\"page\""}>すべて</a>`,
+    ...filterCategories.map(({ id, label }) => {
+      const qs = queryString(id, "");
+      return `<a class="category-filter" href="/a/${escapeHtml(slug)}?${escapeHtml(qs)}"${category === id && !flag ? " aria-current=\"page\"" : ""}>${escapeHtml(label)}</a>`;
+    }),
+    ...(places.some((place) => place.category === "hinanjo") || category === "hinanjo" || Boolean(flag)
+      ? shelterFlags.filter(({ id }) => isKnownPlaceFlag(id, taxonomy)).map(({ id, label }) => {
+          const qs = queryString("hinanjo", id);
+          return `<a class="category-filter" href="/a/${escapeHtml(slug)}?${escapeHtml(qs)}"${flag === id ? " aria-current=\"page\"" : ""}>${escapeHtml(placeFlagLabel(id, taxonomy) || label)}</a>`;
+        })
+      : []),
+  ].join("");
   const sections = [...byCat.entries()]
-    .sort((a, b) => categoryLabel(a[0]).localeCompare(categoryLabel(b[0]), "ja"))
+    .sort((a, b) => categoryLabelFromTaxonomy(a[0], taxonomy).localeCompare(categoryLabelFromTaxonomy(b[0], taxonomy), "ja"))
     .map(([cat, list]) => {
       const shown = list.slice(0, preview);
       const more = list.length - shown.length;
-      const cards = shown.map((p) => renderCard(slug, area.nameJa, p, summaries.get(p.id), allowPosting, officialStatusForPlace(officialStatuses, p))).join("");
+      const cards = shown.map((p) => renderCard(slug, area.nameJa, p, summaries.get(p.id), allowPosting, officialStatusForPlace(officialStatuses, p), taxonomy)).join("");
       const extra =
         more > 0
-          ? `<p class="note"><a href="/a/${escapeHtml(slug)}?${escapeHtml(queryString(cat))}&all=1">この種別をすべて見る（あと${more}件）</a></p>`
+          ? `<p class="note"><a href="/a/${escapeHtml(slug)}?${escapeHtml(queryString(cat, flag))}&all=1">この種別をすべて見る（あと${more}件）</a></p>`
           : "";
-      return `<h2>${escapeHtml(categoryLabel(cat))}</h2><p class="category-note">${escapeHtml(categoryDescription(cat))}</p><div class="cards">${cards}</div>${extra}`;
+      return `<h2>${escapeHtml(categoryLabelFromTaxonomy(cat, taxonomy))}</h2><p class="category-note">${escapeHtml(categoryDescription(cat))}</p><div class="cards">${cards}</div>${extra}`;
     })
     .join("");
   const unmatchedOfficialStatuses = officialStatuses.filter((status) => !places.some((place) => officialStatusForPlace([status], place)));
@@ -435,11 +469,12 @@ export function renderTown(
     <nav class="category-filters" aria-label="場所のカテゴリ">${filterLinks}</nav>
     <form class="search-form" method="get" action="/a/${escapeHtml(slug)}">
       ${category ? `<input type="hidden" name="category" value="${escapeHtml(category)}">` : ""}
+      ${flag ? `<input type="hidden" name="flag" value="${escapeHtml(flag)}">` : ""}
       <label class="sr-only" for="town-search">場所を検索</label>
       <input id="town-search" name="q" type="search" maxlength="40" value="${escapeHtml(query)}" placeholder="店名・施設名・住所で検索">
       <button type="submit">検索</button>
     </form>
-    <p class="result-count">${orderedPlaces.length}件表示${category ? `・${escapeHtml(categoryLabel(category))}` : ""}${query ? `・「${escapeHtml(query)}」` : ""}・最近の報告がある場所を上位表示</p>
+    <p class="result-count">${orderedPlaces.length}件表示${category ? `・${escapeHtml(categoryLabelFromTaxonomy(category, taxonomy))}` : ""}${flag ? `・${escapeHtml(placeFlagLabel(flag, taxonomy) || flag)}` : ""}${query ? `・「${escapeHtml(query)}」` : ""}・最近の報告がある場所を上位表示</p>
   </section>`;
   return page({
     title: `${area.nameJa}の災害板`,
@@ -582,6 +617,7 @@ function renderCard(
   summary?: PlaceSummary,
   allowPosting = false,
   officialStatus?: BoardOfficialStatus,
+  taxonomy?: BoardMeta["taxonomy"],
 ): string {
   const owner = summary?.latestOwner;
   const latest = summary?.latest;
@@ -611,7 +647,7 @@ function renderCard(
       ? `<p class="note">まだ投稿はありません。</p>`
       : "";
   const shelter = isShelter(place.category)
-    ? `<p class="note">指定場所の台帳です。いま開いている避難所とは限りません。</p>`
+    ? `<p class="note">${shelterDesignationLabel(place.flags || [], taxonomy) ? `区分: ${escapeHtml(shelterDesignationLabel(place.flags || [], taxonomy))}。` : "指定場所の"}台帳です。いま開いている避難所とは限りません。</p>`
     : "";
   const maps = !steerMaps && mapsUrl
     ? `<a href="${escapeHtml(mapsUrl)}" rel="noopener">地図で見る</a>`
@@ -687,7 +723,7 @@ export function renderPlace(
           })
           .join("")}</ul>`;
   const shelter = isShelter(place.category)
-    ? `<p class="note">指定場所の台帳です。開設中かどうかは公式ハブで確認してください。</p>`
+    ? `<p class="note">${shelterDesignationLabel(place.flags || [], meta.taxonomy) ? `区分: ${escapeHtml(shelterDesignationLabel(place.flags || [], meta.taxonomy))}。` : "指定場所の"}台帳です。開設中かどうかは公式ハブで確認してください。</p>`
     : "";
   const maps = mapsUrl
     ? `<p><a href="${escapeHtml(mapsUrl)}" rel="noopener">Googleマップを見る</a></p>`
@@ -825,7 +861,7 @@ export function renderProtocol(site: string, origin: string, measurementId?: str
       <ul>
         <li>正規: <a href="${escapeHtml(handoffUrl)}"><code>${escapeHtml(handoffUrl)}</code></a></li>
         <li>互換: <a href="${escapeHtml(legacyUrl)}"><code>${escapeHtml(legacyUrl)}</code></a></li>
-        <li>上流の場所マスター: <a href="${escapeHtml(`${origin.replace(/\/+$/, "")}/api/board/places`)}"><code>${escapeHtml(`${origin.replace(/\/+$/, "")}/api/board/places`)}</code></a></li>
+        <li>上流の場所マスター: <a href="${escapeHtml(`${origin.replace(/\/+$/, "")}/api/board/places`)}"><code>${escapeHtml(`${origin.replace(/\/+$/, "")}/api/board/places`)}</code></a>（<code>opennavi.board/v1</code>）</li>
       </ul>
       <p class="note">プロファイル: <code>${OPENNAVI_HANDOFF_PROFILE}</code> ／ レスポンススキーマ: <code>${HANDOFF_SCHEMA}</code> ／ GET・OPTIONS・CORS対応、書き込みなし。</p>
       ${footer(origin, null)}

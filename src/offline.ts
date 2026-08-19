@@ -19,6 +19,7 @@ export type OfflineSnapshotPlace = {
   name: string;
   area: string;
   category: string;
+  flags: string[];
   address: string | null;
   source: string | null;
   dataBasisDate: string | null;
@@ -106,6 +107,7 @@ export function buildOfflineSnapshot(input: {
       name: place.name,
       area: place.area,
       category: place.category,
+      flags: place.flags || [],
       address: place.address,
       source: publicHttpsUrl(String(place.source || "")),
       dataBasisDate: place.data_basis_date,

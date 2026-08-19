@@ -17,6 +17,7 @@ const place: BoardPlace = {
   name: "テスト店",
   area: "mobara",
   category: "conv",
+  flags: [],
   lat: 35.4,
   lng: 140.3,
   address: "千葉県茂原市",
@@ -47,6 +48,7 @@ test("handoff document keeps the public identity boundary", () => {
   assert.equal(document.pagination.nextCursor, "next-page");
   assert.equal(document.places[0].identityOnly, true);
   assert.equal(document.places[0].lat, 35.4);
+  assert.deepEqual(document.places[0].flags, []);
   assert.equal(document.places[0].reportCount, 0);
   assert.equal(document.places[0].latestReport, null);
   assert.equal("maps_url" in document.places[0], false);
@@ -94,6 +96,7 @@ test("well-known discovery describes the versioned protocol", () => {
   assert.equal(document.protocol.profiles[0].legacyEndpoint, "https://saigaiban.com/api/handoff/{area-slug}");
   assert.equal(document.protocol.profiles[0].documentation, "https://saigaiban.com/protocol/opennavi/v1");
   assert.equal(document.dependencies.placeMaster, "https://opennavi.org/api/board/places");
+  assert.equal(document.dependencies.placeMasterSchema, "opennavi.board/v1");
   assert.equal(document.service.sourceOfTruth, "local-site-after-handoff");
   assert.equal(document.policy.readOnly, true);
 });

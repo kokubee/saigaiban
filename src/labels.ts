@@ -1,3 +1,5 @@
+import type { BoardTaxonomy } from "./types.ts";
+
 export const PREF_NAMES: Record<string, string> = {
   "01": "北海道",
   "02": "青森県",
@@ -49,7 +51,7 @@ export const PREF_NAMES: Record<string, string> = {
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
-  hinanjo: "避難所（指定場所）",
+  hinanjo: "避難所",
   water: "水",
   water_spot: "給水",
   toilet: "トイレ",
@@ -99,6 +101,11 @@ export const CATEGORY_FILTERS: Array<{ id: string; label: string }> = [
   { id: "pharmacy", label: "薬局" },
 ];
 
+export const SHELTER_FLAG_FILTERS: Array<{ id: string; label: string }> = [
+  { id: "shelter-designated", label: "指定避難所" },
+  { id: "shelter-emergency-place", label: "緊急避難場所" },
+];
+
 const CATEGORY_ALIASES: Record<string, string> = {
   clinic: "hospital",
   medical: "hospital",
@@ -120,12 +127,37 @@ export function categoryLabel(id: string): string {
   return CATEGORY_LABELS[id] || "その他";
 }
 
+export function categoryLabelFromTaxonomy(id: string, taxonomy?: BoardTaxonomy): string {
+  return taxonomy?.categories.find((category) => category.id === id)?.label || categoryLabel(id);
+}
+
 export function categoryDescription(id: string): string {
   return CATEGORY_DESCRIPTIONS[id] || "場所の種類が特定できないカード。公式・現地で確認してください。";
 }
 
 export function isKnownCategory(id: string): boolean {
   return Object.prototype.hasOwnProperty.call(CATEGORY_LABELS, id);
+}
+
+export function isKnownCategoryFromTaxonomy(id: string, taxonomy?: BoardTaxonomy): boolean {
+  return isKnownCategory(id) || Boolean(taxonomy?.categories.some((category) => category.id === id));
+}
+
+export function isKnownPlaceFlag(id: string, taxonomy?: BoardTaxonomy): boolean {
+  return SHELTER_FLAG_FILTERS.some((flag) => flag.id === id) || Boolean(taxonomy?.flags.some((flag) => flag.id === id));
+}
+
+export function placeFlagLabel(id: string, taxonomy?: BoardTaxonomy): string | null {
+  return taxonomy?.flags.find((flag) => flag.id === id)?.label || SHELTER_FLAG_FILTERS.find((flag) => flag.id === id)?.label || null;
+}
+
+export function shelterDesignationLabel(flags: string[], taxonomy?: BoardTaxonomy): string | null {
+  for (const id of flags) {
+    const label = placeFlagLabel(id, taxonomy);
+    const isShelterFlag = SHELTER_FLAG_FILTERS.some((flag) => flag.id === id) || Boolean(taxonomy?.flags.some((flag) => flag.id === id && flag.categories?.includes("hinanjo")));
+    if (label && isShelterFlag) return label;
+  }
+  return null;
 }
 
 /** Normalize upstream tags while correcting only unambiguous name/category conflicts. */

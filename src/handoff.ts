@@ -25,6 +25,7 @@ export type HandoffPlace = {
   name: string;
   area: string;
   category: string;
+  flags: string[];
   lat: number | null;
   lng: number | null;
   address: string | null;
@@ -133,6 +134,7 @@ export function buildHandoffDocument(
         name: place.name,
         area: place.area,
         category: place.category,
+        flags: place.flags || [],
         lat: place.lat,
         lng: place.lng,
         address: place.address,

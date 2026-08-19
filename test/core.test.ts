@@ -5,7 +5,7 @@ import { evidenceLabel, freshnessFor, reportEvidence } from "../src/evidence.ts"
 import { activityWindowLabel, escapeHtml, gaSnippet, renderHome, renderLlms, renderPlace, renderRobots, renderSitemap, renderTown } from "../src/html.ts";
 import { categoryDescription, categoryLabel, isShelter, normalizePlaceCategory } from "../src/labels.ts";
 import { googleMapsSearchUrl } from "../src/maps.ts";
-import { officialHubUrl, officialVictimUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
+import { fetchPlaces, officialHubUrl, officialVictimUrl, opennaviOrigin, stripPlace } from "../src/opennavi.ts";
 import { cleanNote, flagReport, formatWhen, latestByPlaces, moderateReport, parseFlagReason, parseModerationAction, parseVerdict, resolvePost } from "../src/reports.ts";
 import { publicPostingAreas, publicPostingEnabled, publicPostingEnabledForArea, publicPostingMode } from "../src/posting.ts";
 import { purgeExpiredIpHashes, rateLimitConfigured, shortIpHmac } from "../src/rate-limit.ts";
@@ -753,13 +753,91 @@ test("stripPlace keeps identity only and drops empty rows", () => {
     data_basis_date: null,
     identity_only: true,
     maps_url: "https://www.google.com/maps/search/?api=1&query=35.4,140.3",
+    flags: ["shelter-designated", "accepting", "shelter-designated"],
     status: "open",
   });
   assert.ok(place);
   assert.equal(place.identity_only, true);
   assert.equal(place.name, "店");
+  assert.deepEqual(place.flags, ["shelter-designated", "accepting"]);
   assert.equal("status" in place, false);
   assert.equal(stripPlace({ id: "", name: "x", area: "mobara" }), null);
+});
+
+test("fetchPlaces forwards the versioned flag filter and imports public flags", async () => {
+  const originalFetch = globalThis.fetch;
+  let requested = "";
+  globalThis.fetch = async (input) => {
+    requested = typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
+    return new Response(JSON.stringify({
+      schema: "opennavi.board/v1",
+      contractVersion: 1,
+      capabilities: ["taxonomy", "place-flags"],
+      disaster_id: "r8",
+      generated_at: "2026-08-19T00:00:00+09:00",
+      next_cursor: null,
+      places: [{ id: "shelter-1", seed_key: "seed", name: "避難所", area: "mobara", category: "hinanjo", flags: ["shelter-designated"], lat: null, lng: null, address: null, source: "gsi-shelter", data_basis_date: null, identity_only: true, maps_url: "" }],
+    }), { headers: { "content-type": "application/json" } });
+  };
+  try {
+    const page = await fetchPlaces("https://opennavi.org", "mobara", { category: "hinanjo", flag: "shelter-designated" });
+    const params = new URL(requested).searchParams;
+    assert.equal(params.get("category"), "hinanjo");
+    assert.equal(params.get("flag"), "shelter-designated");
+    assert.deepEqual(page.places[0]?.flags, ["shelter-designated"]);
+    assert.equal(page.schema, "opennavi.board/v1");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fetchPlaces fails closed on an incompatible board schema", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ schema: "opennavi.board/v2", contractVersion: 2, places: [] }), { headers: { "content-type": "application/json" } });
+  try {
+    await assert.rejects(() => fetchPlaces("https://opennavi.org", "mobara"), /unsupported OpenNavi board/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("shelter designation filters use OpenNavi public flags", () => {
+  const meta = {
+    disaster: { id: "r8", label: "テスト災害" },
+    areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" }],
+    taxonomy: {
+      version: 1,
+      categories: [{ id: "hinanjo", label: "避難所" }],
+      flags: [
+        { id: "shelter-designated", label: "指定避難所", categories: ["hinanjo"] },
+        { id: "shelter-emergency-place", label: "緊急避難場所", categories: ["hinanjo"] },
+      ],
+    },
+  };
+  const base = {
+    id: "shelter-1",
+    seed_key: "spot:hinanjo:mobara:避難所",
+    name: "避難所",
+    area: "mobara",
+    category: "hinanjo",
+    flags: ["shelter-designated"],
+    lat: null,
+    lng: null,
+    address: null,
+    source: "gsi-shelter",
+    data_basis_date: null,
+    identity_only: true as const,
+    maps_url: "",
+  };
+  const html = renderTown("https://saigaiban.com", "https://opennavi.org", meta, "mobara", [
+    base,
+    { ...base, id: "shelter-2", name: "緊急場所", flags: ["shelter-emergency-place"] },
+  ], true, new Map(), null, false, "hinanjo", "", undefined, undefined, "shelter-designated");
+  assert.match(html, /指定避難所/);
+  assert.match(html, /緊急避難場所/);
+  assert.match(html, /flag=shelter-designated/);
+  assert.match(html, /flag=shelter-emergency-place/);
+  assert.match(html, /避難所/);
 });
 
 test("labels", () => {

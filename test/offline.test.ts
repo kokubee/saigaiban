@@ -17,6 +17,7 @@ const place = {
   name: "茂原駅",
   area: "mobara",
   category: "station",
+  flags: ["shelter-designated"],
   lat: 35.4,
   lng: 140.3,
   address: "千葉県茂原市",
@@ -71,6 +72,7 @@ test("offline snapshot strips notes and raw moderation fields", () => {
   assert.equal("note" in snapshot.places[0].latestReport!, false);
   assert.equal("moderation_status" in snapshot.places[0].latestReport!, false);
   assert.equal(snapshot.places[0].mapsUrl.includes("coordinate-url"), false);
+  assert.deepEqual(snapshot.places[0].flags, ["shelter-designated"]);
   assert.equal(offlineSnapshotHasRawModerationFields(snapshot), false);
   assert.doesNotThrow(() => assertOfflineSnapshotSize(snapshot));
 });

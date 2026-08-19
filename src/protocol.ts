@@ -38,6 +38,7 @@ export type ProtocolDiscoveryDocument = {
   dependencies: {
     areaMeta: string;
     placeMaster: string;
+    placeMasterSchema: "opennavi.board/v1";
   };
   policy: {
     readOnly: true;
@@ -78,6 +79,7 @@ export function buildProtocolDiscoveryDocument(site: string, origin: string): Pr
     dependencies: {
       areaMeta: `${normalizedOrigin}/api/board/meta`,
       placeMaster: `${normalizedOrigin}/api/board/places`,
+      placeMasterSchema: "opennavi.board/v1",
     },
     policy: {
       readOnly: true,

@@ -14,7 +14,9 @@
 GET https://saigaiban.com/.well-known/opennavi.json
 ```
 
-発見ドキュメントのスキーマは `opennavi.discovery/v1` です。ここからプロトコルのバージョン、プロファイル、正規エンドポイント、互換エンドポイント、依存する場所マスターの出典を確認できます。
+発見ドキュメントのスキーマは `opennavi.discovery/v1` です。ここからプロトコルのバージョン、プロファイル、正規エンドポイント、互換エンドポイント、依存する場所マスターの出典とスキーマ（`opennavi.board/v1`）を確認できます。
+
+災害版は `opennavi.board/v1` を明示的に扱い、互換性のない v2 以降は誤読せず停止します。v1 の taxonomy への分類・公開識別フラグの追加は、未知項目を無視するため後方互換です。
 
 ## Handoff Profile v1
 

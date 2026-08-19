@@ -33,7 +33,7 @@ import {
   parseModerationAction,
   resolvePost,
 } from "./reports.ts";
-import { isKnownCategory, isShopLike } from "./labels.ts";
+import { isKnownCategoryFromTaxonomy, isKnownPlaceFlag, isShopLike } from "./labels.ts";
 import { publicPostingAreas, publicPostingEnabledForArea } from "./posting.ts";
 import { purgeExpiredIpHashes, rateLimitConfigured, shortIpHmac } from "./rate-limit.ts";
 import { adminRequestHeadersAllowed, reportRequestHeadersAllowed } from "./request.ts";
@@ -189,20 +189,23 @@ export default {
         if (!meta.areas.some((a) => a.slug === slug)) return html(renderNotFound(site, measurementId), 404);
         const showAll = url.searchParams.get("all") === "1";
         const requestedCategory = String(url.searchParams.get("category") || "").trim();
-        const selectedCategory = isKnownCategory(requestedCategory) ? requestedCategory : "";
+        const selectedCategory = isKnownCategoryFromTaxonomy(requestedCategory, meta.taxonomy) ? requestedCategory : "";
+        const requestedFlag = String(url.searchParams.get("flag") || "").trim();
+        const selectedFlag = isKnownPlaceFlag(requestedFlag, meta.taxonomy) ? requestedFlag : "";
         const searchQuery = String(url.searchParams.get("q") || "").trim().slice(0, 40);
         const page = await fetchPlaces(origin, slug, {
-          limit: showAll || selectedCategory || searchQuery ? 200 : 80,
-          ...(selectedCategory ? { category: selectedCategory } : {}),
+          limit: showAll || selectedCategory || selectedFlag || searchQuery ? 200 : 80,
+          ...(selectedCategory || selectedFlag ? { category: selectedCategory || "hinanjo" } : {}),
+          ...(selectedFlag ? { flag: selectedFlag } : {}),
         }, env.PUBLIC_READ_CACHE);
         const [summaries, supportEvents, officialStatuses] = await Promise.all([
           latestByPlaces(env.DB, page.places.map((p) => p.id)),
           publicSupportEventsEnabled(env.PUBLIC_SUPPORT_EVENTS_MODE)
             ? listSupportEvents(env.DB, slug)
             : Promise.resolve({ available: false, events: [] }),
-          fetchOfficialStatuses(origin, slug, selectedCategory ? [selectedCategory] : [], env.PUBLIC_READ_CACHE),
+          fetchOfficialStatuses(origin, slug, selectedCategory || selectedFlag ? [selectedCategory || "hinanjo"] : [], env.PUBLIC_READ_CACHE),
         ]);
-        return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries, measurementId, postingEnabledForArea(slug), selectedCategory, searchQuery, supportEvents, officialStatuses));
+        return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries, measurementId, postingEnabledForArea(slug), selectedCategory, searchQuery, supportEvents, officialStatuses, selectedFlag));
       }
 
       return html(renderNotFound(site, measurementId), 404);

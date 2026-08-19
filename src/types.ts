@@ -1,6 +1,16 @@
 import type { EvidenceProjection } from "./evidence.ts";
 
+export type BoardTaxonomy = {
+  version: number;
+  categories: Array<{ id: string; label: string }>;
+  flags: Array<{ id: string; label: string; categories?: string[] }>;
+};
+
 export type BoardMeta = {
+  schema?: string;
+  contractVersion?: number;
+  capabilities?: string[];
+  taxonomy?: BoardTaxonomy;
   disaster: { id: string; label: string };
   areas: Array<{
     slug: string;
@@ -18,6 +28,8 @@ export type BoardPlace = {
   name: string;
   area: string;
   category: string;
+  /** Public classification flags; absent on legacy OpenNavi responses. */
+  flags?: string[];
   lat: number | null;
   lng: number | null;
   address: string | null;
@@ -28,6 +40,9 @@ export type BoardPlace = {
 };
 
 export type BoardPlacesPage = {
+  schema?: string;
+  contractVersion?: number;
+  capabilities?: string[];
   disaster_id: string;
   generated_at: string;
   next_cursor: string | null;
