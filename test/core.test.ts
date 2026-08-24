@@ -1002,6 +1002,31 @@ test("town pages expose OpenNavi freshness and the place master basis date", () 
   assert.match(html, /現在の営業・開設・安全を保証しません/);
 });
 
+test("town pages provide purpose-first quick filters and a print-safe stylesheet", () => {
+  const meta = {
+    disaster: { id: "r8", label: "テスト災害" },
+    taxonomy: {
+      version: 1,
+      categories: [
+        { id: "conv", label: "コンビニ" },
+        { id: "water_spot", label: "給水" },
+        { id: "hinanjo", label: "避難所" },
+      ],
+      flags: [],
+    },
+    areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" as const }],
+  };
+  const base = { id: "place-1", seed_key: "seed", name: "給水所", area: "mobara", category: "water_spot", flags: [], lat: null, lng: null, address: null, source: "test", data_basis_date: null, identity_only: true, maps_url: "" };
+  const html = renderTown("https://saigaiban.com", "https://opennavi.org", meta, "mobara", [base, { ...base, id: "place-2", name: "コンビニ", category: "conv" }, { ...base, id: "place-3", name: "避難所", category: "hinanjo" }], false, new Map());
+  assert.match(html, /今必要な情報から探す/);
+  assert.match(html, /class="category-filter quick-filter"/);
+  assert.match(html, /避難・安全/);
+  assert.match(html, /水・給水/);
+  assert.match(html, /給油・店/);
+  assert.match(html, /@media print/);
+  assert.match(html, /break-inside:avoid/);
+});
+
 test("health checks the OpenNavi dependency and fails closed", async () => {
   const originalFetch = globalThis.fetch;
   const meta = { disaster: { id: "r8", label: "テスト災害" }, generated_at: "2026-08-24T00:00:00Z", areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" }] };
