@@ -129,13 +129,18 @@ export async function fetchMeta(origin: string, publicReadCache?: string): Promi
     cacheMode(publicReadCache),
     OPENNAVI_CACHE_TTL,
     OPENNAVI_CACHE_STALE,
-  )) as BoardMeta;
+  )) as BoardMeta & { generated_at?: unknown; generatedAt?: unknown };
   assertSupportedBoardContract(doc);
   if (!doc?.disaster?.id || !Array.isArray(doc.areas)) throw new Error("invalid board meta");
   return {
     schema: typeof doc.schema === "string" ? doc.schema : undefined,
     contractVersion: Number.isFinite(Number(doc.contractVersion)) ? Number(doc.contractVersion) : undefined,
     capabilities: Array.isArray(doc.capabilities) ? doc.capabilities.filter((value): value is string => typeof value === "string") : undefined,
+    generatedAt: typeof doc.generated_at === "string"
+      ? doc.generated_at
+      : typeof doc.generatedAt === "string"
+        ? doc.generatedAt
+        : undefined,
     taxonomy:
       doc.taxonomy && typeof doc.taxonomy === "object"
         ? {

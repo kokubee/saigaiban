@@ -193,6 +193,18 @@ lifeline_reports
 
 ## 7. 実装フェーズ
 
+### 2026-08-24 — OpenNavi依存境界の第一段実装
+
+OpenNavi側に場所台帳・公式情報の責務を残したまま、災害板側の「出典・鮮度・障害時の退避」を先に実装した。
+
+- `generated_at` を市区町村ページへ渡し、24時間以内／要再確認／古い可能性あり／更新時刻不明を表示
+- 場所カードと詳細ページに、OpenNaviから来た場所台帳の基準日を表示
+- `/health` が `api/board/meta` を確認し、依存障害時は `502` と `dependencies.opennavi.ok=false` を返す
+- HTML取得失敗時は、対象slugのOpenNavi公式ハブへ戻す（推測の最新状態を表示しない）
+- 鮮度判定を `src/upstream.ts` に分離し、固定時刻テストを追加
+
+受入条件は、上流の取得時刻を営業・開設・安全の判定に使わないこと、OpenNavi障害時に200の擬似正常を返さないこと、地域別の公式ハブへ退避できること。公開デプロイ前に本番の `/health`、町ページ、公式ハブリンクをcurlで確認する。
+
 ### P-1 — Baseline / Contract Reconciliation（最初に実施）
 
 対象: `src/index.ts`、`src/reports.ts`、`src/opennavi.ts`、`src/cache.ts`、OpenNavi側の `/lifelines`・LINE・認証契約。

@@ -1,4 +1,5 @@
 import {
+  escapeHtml,
   renderAbout,
   renderHome,
   renderLegal,
@@ -93,7 +94,32 @@ export default {
         return protocolJson(buildProtocolDiscoveryDocument(site, origin));
       }
       if (path === "/health") {
-        return json({ ok: true });
+        try {
+          // Health must observe the upstream origin, not a deliberately stale public cache.
+          const meta = await fetchMeta(origin, "off");
+          return json({
+            ok: true,
+            service: "saigaiban",
+            checkedAt: new Date().toISOString(),
+            dependencies: {
+              opennavi: {
+                ok: true,
+                origin,
+                schema: meta.schema || "opennavi.board/v1",
+                contractVersion: meta.contractVersion || 1,
+                disaster: meta.disaster,
+                generatedAt: meta.generatedAt || null,
+              },
+            },
+          });
+        } catch {
+          return json({
+            ok: false,
+            service: "saigaiban",
+            checkedAt: new Date().toISOString(),
+            dependencies: { opennavi: { ok: false, origin } },
+          }, 502);
+        }
       }
       if (path === "/legal" || path === "/terms" || path === "/privacy" || path === "/research") {
         return html(renderLegal(site, origin, path.slice(1) as "legal" | "terms" | "privacy" | "research", measurementId));
@@ -205,7 +231,7 @@ export default {
             : Promise.resolve({ available: false, events: [] }),
           fetchOfficialStatuses(origin, slug, selectedCategory || selectedFlag ? [selectedCategory || "hinanjo"] : [], env.PUBLIC_READ_CACHE),
         ]);
-        return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries, measurementId, postingEnabledForArea(slug), selectedCategory, searchQuery, supportEvents, officialStatuses, selectedFlag));
+        return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries, measurementId, postingEnabledForArea(slug), selectedCategory, searchQuery, supportEvents, officialStatuses, selectedFlag, page.generated_at));
       }
 
       return html(renderNotFound(site, measurementId), 404);
@@ -213,8 +239,10 @@ export default {
       if (handoffPath) {
         return handoffJson({ ok: false, error: "引き継ぎデータを取得できません。" }, 502);
       }
+      const areaSlug = path.match(/^\/a\/([a-z0-9-]+)/i)?.[1] || "";
+      const fallbackUrl = areaSlug ? `${officialVictimUrl(origin, areaSlug)}` : officialVictimUrl(origin);
       return html(
-        `<!doctype html><meta charset="utf-8"><title>災害板</title><p>いま板を開けません。公式ハブを見てください。</p><p><a href="${officialVictimUrl(origin)}">OpenNavi（被災者向け）</a></p>`,
+        `<!doctype html><meta charset="utf-8"><title>災害板</title><p>いま板を開けません。公式ハブを見てください。</p><p><a href="${escapeHtml(fallbackUrl)}">${areaSlug ? "この地域のOpenNavi公式ハブ" : "OpenNavi（被災者向け）"}</a></p>`,
         502,
       );
     }

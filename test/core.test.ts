@@ -910,6 +910,134 @@ test("public SEO assets describe the resident board without exposing APIs", () =
   assert.match(renderSitemap("https://saigaiban.com", ["mobara"]), /https:\/\/saigaiban\.com\/protocol\/opennavi\/v1/);
 });
 
+test("town SEO metadata reflects shelter search intent without claiming an open shelter", () => {
+  const meta = {
+    disaster: { id: "r8-chiba-heavy-rain", label: "令和8年8月千葉豪雨" },
+    areas: [{ slug: "yachiyo", nameJa: "八千代市", prefCode: "12", status: "active" as const }],
+  };
+  const places = [{
+    id: "shelter-1",
+    seed_key: "spot:hinanjo:yachiyo:避難所",
+    name: "八千代市立小学校（指定避難所）",
+    area: "yachiyo",
+    category: "hinanjo",
+    flags: ["shelter-designated"],
+    lat: null,
+    lng: null,
+    address: "千葉県八千代市",
+    source: "gsi-shelter",
+    data_basis_date: null,
+    identity_only: true,
+    maps_url: "",
+  }];
+  const html = renderTown(
+    "https://saigaiban.com",
+    "https://opennavi.org",
+    meta,
+    "yachiyo",
+    places,
+    false,
+    new Map(),
+  );
+  assert.match(html, /<title>八千代市の避難所・避難場所｜災害板<\/title>/);
+  assert.match(html, /令和8年8月千葉豪雨の八千代市の避難所・避難場所/);
+  assert.match(html, /避難所・避難場所や店舗など/);
+  assert.match(html, /開設中とは限りません/);
+  const filtered = renderTown(
+    "https://saigaiban.com",
+    "https://opennavi.org",
+    meta,
+    "yachiyo",
+    places,
+    false,
+    new Map(),
+    null,
+    false,
+    "conv",
+  );
+  assert.match(filtered, /<title>八千代市の災害板<\/title>/);
+});
+
+test("town pages expose OpenNavi freshness and the place master basis date", () => {
+  const meta = {
+    disaster: { id: "r8", label: "令和8年千葉豪雨" },
+    areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" as const }],
+  };
+  const place = {
+    id: "shelter-1",
+    seed_key: "shelter-1",
+    name: "茂原市立中央小学校",
+    area: "mobara",
+    category: "hinanjo",
+    flags: ["shelter-emergency-place"],
+    lat: null,
+    lng: null,
+    address: "千葉県茂原市",
+    source: "gsi-shelter",
+    data_basis_date: "2026-08-01",
+    identity_only: true,
+    maps_url: "",
+  };
+  const html = renderTown(
+    "https://saigaiban.com",
+    "https://opennavi.org",
+    meta,
+    "mobara",
+    [place],
+    false,
+    new Map(),
+    null,
+    false,
+    undefined,
+    undefined,
+    undefined,
+    [],
+    undefined,
+    "2026-08-23T00:00:00Z",
+  );
+  assert.match(html, /情報の出典と更新/);
+  assert.match(html, /OpenNavi場所台帳の取得時刻/);
+  assert.match(html, /場所台帳の基準日: 2026-08-01/);
+  assert.match(html, /緊急避難場所/);
+  assert.match(html, /現在の営業・開設・安全を保証しません/);
+});
+
+test("health checks the OpenNavi dependency and fails closed", async () => {
+  const originalFetch = globalThis.fetch;
+  const meta = { disaster: { id: "r8", label: "テスト災害" }, generated_at: "2026-08-24T00:00:00Z", areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" }] };
+  globalThis.fetch = async (input) => {
+    const requestUrl = typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
+    if (requestUrl.includes("/api/board/meta")) return new Response(JSON.stringify(meta), { headers: { "content-type": "application/json" } });
+    throw new Error(`unexpected fetch: ${requestUrl}`);
+  };
+  try {
+    const healthy = await worker.fetch(new Request("https://saigaiban.com/health"), {
+      OPENNAVI_ORIGIN: "https://opennavi.org",
+      SITE_ORIGIN: "https://saigaiban.com",
+      DB: {},
+    } as unknown as Env);
+    assert.equal(healthy.status, 200);
+    const healthyBody = await healthy.json() as { ok: boolean; dependencies: { opennavi: { ok: boolean; origin: string; generatedAt: string | null } } };
+    assert.equal(healthyBody.ok, true);
+    assert.equal(healthyBody.dependencies.opennavi.ok, true);
+    assert.equal(healthyBody.dependencies.opennavi.origin, "https://opennavi.org");
+    assert.equal(healthyBody.dependencies.opennavi.generatedAt, "2026-08-24T00:00:00Z");
+
+    globalThis.fetch = async () => { throw new Error("down"); };
+    const unhealthy = await worker.fetch(new Request("https://saigaiban.com/health"), {
+      OPENNAVI_ORIGIN: "https://opennavi.org",
+      SITE_ORIGIN: "https://saigaiban.com",
+      DB: {},
+    } as unknown as Env);
+    assert.equal(unhealthy.status, 502);
+    const unhealthyBody = await unhealthy.json() as { ok: boolean; dependencies: { opennavi: { ok: boolean } } };
+    assert.equal(unhealthyBody.ok, false);
+    assert.equal(unhealthyBody.dependencies.opennavi.ok, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("pages include a mobile PWA footer menu with area-aware official navigation", () => {
   const meta = {
     disaster: { id: "r8", label: "テスト災害" },

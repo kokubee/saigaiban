@@ -11,6 +11,7 @@ export type BoardMeta = {
   contractVersion?: number;
   capabilities?: string[];
   taxonomy?: BoardTaxonomy;
+  generatedAt?: string;
   disaster: { id: string; label: string };
   areas: Array<{
     slug: string;

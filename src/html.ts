@@ -18,6 +18,7 @@ import { evidenceLabel } from "./evidence.ts";
 import { VERDICT_LABEL, VISITOR_VERDICTS, formatWhen } from "./reports.ts";
 import { supportEventCategoryLabel, supportEventFreshnessLabel, supportEventStatusLabel } from "./support-events.ts";
 import { tourismAreaConfig } from "./tourism-areas.ts";
+import { formatUpstreamGeneratedAt, upstreamFreshnessFor, upstreamFreshnessLabel } from "./upstream.ts";
 import type { BoardMeta, BoardOfficialStatus, BoardPlace, PlaceSummary, Report, SupportEventQueryResult, TourismFetchResult } from "./types.ts";
 import { HANDOFF_SCHEMA, OPENNAVI_HANDOFF_PROFILE, OPENNAVI_PROTOCOL_NAME, OPENNAVI_PROTOCOL_VERSION, handoffApiUrl, legacyHandoffApiUrl } from "./protocol.ts";
 import { PWA_ICON_PATH, PWA_MANIFEST_PATH, PWA_OFFLINE_CLIENT_SCRIPT_PATH, PWA_OFFLINE_SAVE_SCRIPT_PATH, PWA_OFFLINE_SHELL_PATH } from "./pwa.ts";
@@ -405,6 +406,7 @@ export function renderTown(
   supportEvents: SupportEventQueryResult = { available: false, events: [] },
   officialStatuses: BoardOfficialStatus[] = [],
   selectedFlag?: string,
+  upstreamGeneratedAt?: string | null,
 ): string {
   const area = meta.areas.find((a) => a.slug === slug);
   if (!area) return renderNotFound(site, measurementId);
@@ -468,8 +470,17 @@ export function renderTown(
       return `<h2>${escapeHtml(categoryLabelFromTaxonomy(cat, taxonomy))}</h2><p class="category-note">${escapeHtml(categoryDescription(cat))}</p><div class="cards">${cards}</div>${extra}`;
     })
     .join("");
+  const hasShelters = places.some((place) => place.category === "hinanjo");
+  const disasterLabel = String(meta.disaster.label || "").trim();
+  const disasterPrefix = disasterLabel ? `${disasterLabel}の` : "";
+  const baseView = !category && !flag && !query && !showAll;
+  const townTitle = baseView && hasShelters ? `${area.nameJa}の避難所・避難場所｜災害板` : `${area.nameJa}の災害板`;
+  const townDescription = baseView && hasShelters
+    ? `${disasterPrefix}${area.nameJa}の避難所・避難場所などの場所カードを確認できます。開設状況や営業は公式情報で確認してください。`
+    : `${disasterPrefix}${area.nameJa}の場所カードと現地報告を確認できます。公式ではありません。`;
   const unmatchedOfficialStatuses = officialStatuses.filter((status) => !places.some((place) => officialStatusForPlace([status], place)));
   const officialOnly = renderUnmatchedOfficialStatuses(unmatchedOfficialStatuses);
+  const sourceStatus = renderUpstreamStatus(origin, slug, upstreamGeneratedAt);
   const tools = `<section class="town-tools" aria-labelledby="town-tools-title">
     <h2 id="town-tools-title">まず探す場所を絞る</h2>
     <nav class="category-filters" aria-label="場所のカテゴリ">${filterLinks}</nav>
@@ -483,8 +494,8 @@ export function renderTown(
     <p class="result-count">${orderedPlaces.length}件表示${category ? `・${escapeHtml(categoryLabelFromTaxonomy(category, taxonomy))}` : ""}${flag ? `・${escapeHtml(placeFlagLabel(flag, taxonomy) || flag)}` : ""}${query ? `・「${escapeHtml(query)}」` : ""}・最近の報告がある場所を上位表示</p>
   </section>`;
   return page({
-    title: `${area.nameJa}の災害板`,
-    description: `${area.nameJa}の場所カード。投稿は見た時点の話です。公式ではありません。`,
+    title: townTitle,
+    description: townDescription,
     canonical: `${site}/a/${slug}`,
     origin,
     measurementId,
@@ -492,7 +503,9 @@ export function renderTown(
     body: `
       <nav><a href="/">災害板</a><a href="/about">この板について</a><a href="${escapeHtml(officialHubUrl(origin, slug))}">${escapeHtml(area.nameJa)}の公式ハブ</a></nav>
       <h1>${escapeHtml(area.nameJa)}の災害板</h1>
-      <p class="lead">${allowPosting ? "場所の正体に、「いまどうだったか」を書けます。" : "場所ごとのこれまでの報告を確認できます。"} 投稿は見た時点の話で、公式ではありません。店の営業は地図、避難所の開設は公式ハブで確認してください。</p>
+      <p class="lead">${allowPosting ? "場所の正体に、「いまどうだったか」を書けます。" : hasShelters ? "避難所・避難場所や店舗など、場所ごとのこれまでの報告を確認できます。" : "場所ごとのこれまでの報告を確認できます。"} 投稿は見た時点の話で、公式ではありません。店の営業は地図、避難所の開設は公式ハブで確認してください。</p>
+      ${disasterLabel ? `<p class="note">${escapeHtml(disasterLabel)}の場所台帳をもとに表示しています。</p>` : ""}
+      ${sourceStatus}
       ${tools}
       ${offlineTools(slug, area.nameJa)}
       ${officialOnly}
@@ -501,6 +514,22 @@ export function renderTown(
       ${footer(origin, meta, slug)}
     `,
   });
+}
+
+function renderUpstreamStatus(origin: string, slug: string, generatedAt?: string | null): string {
+  const freshness = upstreamFreshnessFor(generatedAt);
+  const label = upstreamFreshnessLabel(freshness);
+  const detail = generatedAt
+    ? `OpenNavi場所台帳の取得時刻: ${formatUpstreamGeneratedAt(generatedAt)}（${label}）`
+    : `OpenNavi場所台帳の取得時刻: ${label}`;
+  const caution = freshness === "fresh"
+    ? "これは場所台帳の更新時刻であり、営業中・開設中・安全を示すものではありません。"
+    : "更新時刻が古い、または確認できないため、現在の営業・開設・安全を保証しません。公式ハブで再確認してください。";
+  return `<section class="support-card" aria-labelledby="upstream-status-title">
+    <h2 id="upstream-status-title">情報の出典と更新</h2>
+    <p>${escapeHtml(detail)}</p>
+    <p class="note">${escapeHtml(caution)} <a href="${escapeHtml(officialHubUrl(origin, slug))}">${escapeHtml("OpenNavi公式ハブ")}</a></p>
+  </section>`;
 }
 
 function offlineTools(slug: string, areaName: string): string {
@@ -659,9 +688,10 @@ function renderCard(
     ? `<a href="${escapeHtml(mapsUrl)}" rel="noopener">地図で見る</a>`
     : "";
   const addr = place.address ? `<p class="note">${escapeHtml(place.address)}</p>` : "";
+  const basis = place.data_basis_date ? `<p class="note">場所台帳の基準日: ${escapeHtml(place.data_basis_date)}</p>` : "";
   return `<article class="card">
     <h3>${tag}${escapeHtml(place.name)}</h3>
-    ${addr}${shelter}${officialLine}${ownerLine}${latestLine}
+    ${addr}${basis}${shelter}${officialLine}${ownerLine}${latestLine}
     <p>${maps}${maps ? " ・ " : ""}<a href="/a/${escapeHtml(slug)}/p/${escapeHtml(place.id)}">${allowPosting ? "いまどうかを書く" : "これまでの報告を見る"}</a></p>
   </article>`;
 }
@@ -731,6 +761,7 @@ export function renderPlace(
   const shelter = isShelter(place.category)
     ? `<p class="note">${shelterDesignationLabel(place.flags || [], meta.taxonomy) ? `区分: ${escapeHtml(shelterDesignationLabel(place.flags || [], meta.taxonomy))}。` : "指定場所の"}台帳です。開設中かどうかは公式ハブで確認してください。</p>`
     : "";
+  const basis = place.data_basis_date ? `<p class="note">場所台帳の基準日: ${escapeHtml(place.data_basis_date)}</p>` : "";
   const maps = mapsUrl
     ? `<p><a href="${escapeHtml(mapsUrl)}" rel="noopener">Googleマップを見る</a></p>`
     : "";
@@ -777,7 +808,7 @@ export function renderPlace(
       <nav><a href="/">災害板</a><a href="/a/${escapeHtml(slug)}">${escapeHtml(nameJa)}</a><a href="${escapeHtml(officialHubUrl(origin, slug))}">公式ハブ</a></nav>
       <h1>${escapeHtml(place.name)}</h1>
       <p class="lead">${allowPosting ? "見たときの様子、または店側の自己申告を書けます。" : "見たときの様子や、これまでの報告を確認できます。"} 氏名・電話・待ち合わせは受けません。公式発表の代わりにはなりません。</p>
-      ${shelter}${maps}
+      ${shelter}${basis}${maps}
       ${notice ? `<p class="flash">${escapeHtml(notice)}</p>` : ""}
       ${postingNotice}${reportForm}
       <h2>これまでの投稿</h2>
