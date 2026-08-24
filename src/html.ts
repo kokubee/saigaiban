@@ -120,6 +120,8 @@ nav a{margin-right:0}
 .category-filter{display:inline-block;border:1px solid #b9d5df;border-radius:999px;background:rgb(255 255 255 / 80%);padding:7px 12px;text-decoration:none;transition:transform .2s ease,background .2s ease,border-color .2s ease}
 .category-filter:hover{transform:translateY(-1px);background:var(--sky);border-color:#86b9c8}
 .category-filter[aria-current="page"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.quick-label{margin:18px 0 8px;font-weight:800;color:#24485b}
+.quick-filter{background:var(--mint);border-color:#9bcfc4}
 .category-note{color:var(--muted);font-size:.9rem;margin:-3px 0 10px}
 .search-form{display:flex;gap:8px;max-width:40rem}
 .search-form input{flex:1;min-width:0;padding:11px 13px;border:1px solid var(--line);border-radius:12px;background:var(--paper);color:var(--ink)}
@@ -179,6 +181,13 @@ nav a{margin-right:0}
   .mobile-nav a:hover{background:var(--sky);color:var(--accent-strong);transform:translateY(-1px)}
   .mobile-nav a[aria-current="page"]{background:var(--accent);color:#fff;box-shadow:0 6px 14px rgb(8 86 98 / 18%)}
   .mobile-nav a.mobile-nav-line{color:#06c755}
+}
+@media print{
+  body{background:#fff;color:#000}
+  body::before,body::after,.banner,.wrap>nav:first-child,.mobile-nav,.town-tools,.offline-tools,form,button{display:none!important}
+  .wrap{max-width:none;padding:0}
+  .card,.support-card,.event-card{box-shadow:none;break-inside:avoid}
+  a{color:#000;text-decoration:none}
 }
 `;
 
@@ -457,6 +466,21 @@ export function renderTown(
         })
       : []),
   ].join("");
+  const quickNeedDefinitions: Array<{ label: string; candidates: string[] }> = [
+    { label: "避難・安全", candidates: ["hinanjo"] },
+    { label: "水・給水", candidates: ["water_spot", "water"] },
+    { label: "食事・物資", candidates: ["food", "meal"] },
+    { label: "トイレ", candidates: ["toilet"] },
+    { label: "給油・店", candidates: ["gas", "conv", "super", "shop"] },
+    { label: "医療", candidates: ["hospital", "pharmacy"] },
+    { label: "洗濯・入浴", candidates: ["bath", "laundry"] },
+  ];
+  const quickNeedLinks = quickNeedDefinitions.flatMap(({ label, candidates }) => {
+    const id = candidates.find((candidate) => isKnownCategoryFromTaxonomy(candidate, taxonomy) && (candidate === category || places.some((place) => place.category === candidate) || Boolean(taxonomy?.categories.some((item) => item.id === candidate))));
+    if (!id) return [];
+    const qs = queryString(id, "");
+    return [`<a class="category-filter quick-filter" href="/a/${escapeHtml(slug)}?${escapeHtml(qs)}"${category === id && !flag ? " aria-current=\"page\"" : ""}>${escapeHtml(label)}</a>`];
+  }).join("");
   const sections = [...byCat.entries()]
     .sort((a, b) => categoryLabelFromTaxonomy(a[0], taxonomy).localeCompare(categoryLabelFromTaxonomy(b[0], taxonomy), "ja"))
     .map(([cat, list]) => {
@@ -483,6 +507,8 @@ export function renderTown(
   const sourceStatus = renderUpstreamStatus(origin, slug, upstreamGeneratedAt);
   const tools = `<section class="town-tools" aria-labelledby="town-tools-title">
     <h2 id="town-tools-title">まず探す場所を絞る</h2>
+    ${quickNeedLinks ? `<p class="quick-label">今必要な情報から探す</p><nav class="category-filters" aria-label="今必要な情報">${quickNeedLinks}</nav>` : ""}
+    <p class="quick-label">場所のカテゴリ</p>
     <nav class="category-filters" aria-label="場所のカテゴリ">${filterLinks}</nav>
     <form class="search-form" method="get" action="/a/${escapeHtml(slug)}">
       ${category ? `<input type="hidden" name="category" value="${escapeHtml(category)}">` : ""}
