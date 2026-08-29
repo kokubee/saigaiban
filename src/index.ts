@@ -44,6 +44,7 @@ import { buildHandoffDocument } from "./handoff.ts";
 import { buildProtocolDiscoveryDocument } from "./protocol.ts";
 import { buildOfflineSnapshot, OFFLINE_SNAPSHOT_MAX_PLACES, OfflineSnapshotError, type OfflineReportRevision } from "./offline.ts";
 import { PWA_ICON_PATH, PWA_MANIFEST_PATH, PWA_OFFLINE_CLIENT_SCRIPT_PATH, PWA_OFFLINE_SAVE_SCRIPT_PATH, PWA_OFFLINE_SHELL_PATH, PWA_SERVICE_WORKER_PATH, renderManifest, renderOfflineClient, renderOfflineSaveClient, renderPwaIcon, renderServiceWorker } from "./pwa.ts";
+import { boardMetaForArea, isNotoReadOnlyArea } from "./disaster-context.ts";
 import type { BoardPlace, Env, PlaceSummary } from "./types.ts";
 
 export default {
@@ -58,7 +59,9 @@ export default {
     const postingAreas = publicPostingAreas(env.PUBLIC_POSTING_AREAS);
     const postingSecurityReady = turnstileReady && rateLimitConfigured(env.RATE_LIMIT_HMAC_SECRET);
     const postingEnabledForArea = (areaSlug: string): boolean =>
-      postingSecurityReady && publicPostingEnabledForArea(env.PUBLIC_POSTING_MODE, areaSlug, postingAreas);
+      !isNotoReadOnlyArea(areaSlug)
+      && postingSecurityReady
+      && publicPostingEnabledForArea(env.PUBLIC_POSTING_MODE, areaSlug, postingAreas);
     const reportingEnabled = rateLimitConfigured(env.RATE_LIMIT_HMAC_SECRET);
     const path = url.pathname.replace(/\/+$/, "") || "/";
     const protocolHandoffPath = path.match(/^\/api\/opennavi\/v1\/handoff\/([a-z0-9-]+)$/i);
@@ -206,7 +209,7 @@ export default {
             ? "通報を受け付けました。内容を確認します。"
             : url.searchParams.get("err");
         const reports = await listReports(env.DB, place.id);
-        return html(renderPlace(site, origin, meta, slug, place, reports, notice, measurementId, postingEnabledForArea(slug), turnstileSiteKey, reportingEnabled), 200, "private, no-store");
+        return html(renderPlace(site, origin, boardMetaForArea(meta, slug), slug, place, reports, notice, measurementId, postingEnabledForArea(slug), turnstileSiteKey, reportingEnabled), 200, "private, no-store");
       }
 
       const town = path.match(/^\/a\/([a-z0-9-]+)$/);
@@ -231,7 +234,7 @@ export default {
             : Promise.resolve({ available: false, events: [] }),
           fetchOfficialStatuses(origin, slug, selectedCategory || selectedFlag ? [selectedCategory || "hinanjo"] : [], env.PUBLIC_READ_CACHE),
         ]);
-        return html(renderTown(site, origin, meta, slug, page.places, showAll, summaries, measurementId, postingEnabledForArea(slug), selectedCategory, searchQuery, supportEvents, officialStatuses, selectedFlag, page.generated_at));
+        return html(renderTown(site, origin, boardMetaForArea(meta, slug), slug, page.places, showAll, summaries, measurementId, postingEnabledForArea(slug), selectedCategory, searchQuery, supportEvents, officialStatuses, selectedFlag, page.generated_at));
       }
 
       return html(renderNotFound(site, measurementId), 404);
@@ -289,7 +292,7 @@ async function handleOfflineSnapshot(
     const snapshot = buildOfflineSnapshot({
       site,
       origin,
-      meta,
+      meta: boardMetaForArea(meta, slug),
       area,
       places,
       summaries,
@@ -348,7 +351,7 @@ async function handleHandoff(
     const cursor = String(rawCursor || "").trim().slice(0, 256) || undefined;
     const page = await fetchPlaces(origin, slug, { limit: 200, ...(cursor ? { cursor } : {}) }, env.PUBLIC_READ_CACHE);
     const summaries = await latestByPlacesInChunks(env.DB, page.places.map((place) => place.id));
-    return handoffJson(buildHandoffDocument(site, meta, area, page.places, summaries, page.generated_at || null, page.next_cursor || null));
+    return handoffJson(buildHandoffDocument(site, boardMetaForArea(meta, slug), area, page.places, summaries, page.generated_at || null, page.next_cursor || null));
   } catch {
     return handoffJson({ ok: false, error: "引き継ぎデータを取得できません。" }, 502);
   }

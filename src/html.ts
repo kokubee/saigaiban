@@ -22,6 +22,7 @@ import { formatUpstreamGeneratedAt, upstreamFreshnessFor, upstreamFreshnessLabel
 import type { BoardMeta, BoardOfficialStatus, BoardPlace, PlaceSummary, Report, SupportEventQueryResult, TourismFetchResult } from "./types.ts";
 import { HANDOFF_SCHEMA, OPENNAVI_HANDOFF_PROFILE, OPENNAVI_PROTOCOL_NAME, OPENNAVI_PROTOCOL_VERSION, handoffApiUrl, legacyHandoffApiUrl } from "./protocol.ts";
 import { PWA_ICON_PATH, PWA_MANIFEST_PATH, PWA_OFFLINE_CLIENT_SCRIPT_PATH, PWA_OFFLINE_SAVE_SCRIPT_PATH, PWA_OFFLINE_SHELL_PATH } from "./pwa.ts";
+import { hasNotoReadOnlyArea, isNotoReadOnlyArea, NOTO_HEAVY_RAIN_DISASTER, NOTO_HEAVY_RAIN_REGION_ID } from "./disaster-context.ts";
 
 export function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -303,6 +304,8 @@ export function renderHome(
   selectedRegion?: string | null,
 ): string {
   const victimUrl = officialVictimUrl(origin);
+  const notoReadOnlyActive = hasNotoReadOnlyArea(meta);
+  const featuredDisasterLabel = notoReadOnlyActive ? NOTO_HEAVY_RAIN_DISASTER.label : meta.disaster.label;
   const hasRegions = meta.areas.some((area) => Boolean(area.region?.id));
   let activeAreas: typeof meta.areas = [];
   let tabs = "";
@@ -324,9 +327,12 @@ export function renderHome(
       byRegion.set(key, current);
     }
     const groups = [...byRegion.values()].sort((a, b) => a.order - b.order || a.label.localeCompare(b.label, "ja"));
+    const defaultRegionId = groups.some((group) => group.id === NOTO_HEAVY_RAIN_REGION_ID)
+      ? NOTO_HEAVY_RAIN_REGION_ID
+      : groups[0]?.id || "";
     const activeId = groups.some((group) => group.id === selectedRegion)
       ? String(selectedRegion)
-      : groups[0]?.id || "";
+      : defaultRegionId;
     activeGroupLabel = groups.find((group) => group.id === activeId)?.label || "地域";
     activeAreas = (groups.find((group) => group.id === activeId)?.areas || [])
       .slice()
@@ -372,17 +378,26 @@ export function renderHome(
         )
         .join("")}</div>`
     : `<p class="note">開いている市区町村はまだありません。</p>`;
+  const notoReadOnlyEntry = notoReadOnlyActive
+    ? `<section class="support-card" aria-labelledby="noto-read-only-title">
+        <h2 id="noto-read-only-title">${escapeHtml(NOTO_HEAVY_RAIN_DISASTER.label)}</h2>
+        <p><strong>読み取り専用で公開中</strong></p>
+        <p>羽咋市・志賀町・宝達志水町・中能登町の場所ごとの状況を確認する読み取り専用板です。投稿受付は準備中です。避難情報・避難所はOpenNaviと自治体公式情報を優先してください。</p>
+        <p><a href="${escapeHtml(victimUrl)}">OpenNaviで避難情報・避難所を確認する</a></p>
+      </section>`
+    : "";
   return page({
     title: "災害板 — 場所ごとのいまどうか",
-    description: `${meta.disaster.label}の町ごとに、場所のカードを未確認から立てています。公式ではありません。`,
+    description: `${featuredDisasterLabel}の町ごとの場所カードを確認できます。投稿受付は準備中で、公式情報はOpenNaviと自治体を優先します。`,
     canonical: `${site}/`,
     origin,
     measurementId,
     body: `
       <nav><a href="/">災害板</a><a href="/about">この板について</a><a href="${escapeHtml(victimUrl)}">OpenNavi（被災者向け）</a></nav>
       <h1>災害板</h1>
-      <p class="lead">${escapeHtml(meta.disaster.label)}について、場所ごとの「いまどうか」を書く板です。匿名の雑談スレではありません。</p>
-      <p class="note">まず${selectionLabel}と市区町村を選びます。場所一覧と投稿は市区町村ページを開いた時だけ読み込みます。自治体・インフラの公式情報は <a href="${escapeHtml(victimUrl)}">OpenNaviの被災者向け入口</a> へ。</p>
+      <p class="lead">${escapeHtml(featuredDisasterLabel)}について、場所ごとの状況を確認する板です。公式情報や緊急通報の代わりではありません。</p>
+      <p class="note">まず${selectionLabel}と市区町村を選びます。場所一覧は市区町村ページを開いた時だけ読み込みます。自治体・インフラの公式情報は <a href="${escapeHtml(victimUrl)}">OpenNaviの被災者向け入口</a> へ。</p>
+      ${notoReadOnlyEntry}
       <section class="support-card external-entry" aria-labelledby="kumamoto-entry-title">
         <h2 id="kumamoto-entry-title">熊本の情報・支援先</h2>
         <p>熊本の被災者向け情報は専用ナビに集約しています。支援する方はOpenNaviの支援先ページから熊本を選んでください。</p>
@@ -496,15 +511,24 @@ export function renderTown(
     .join("");
   const hasShelters = places.some((place) => place.category === "hinanjo");
   const disasterLabel = String(meta.disaster.label || "").trim();
+  const notoReadOnly = isNotoReadOnlyArea(slug);
   const disasterPrefix = disasterLabel ? `${disasterLabel}の` : "";
   const baseView = !category && !flag && !query && !showAll;
-  const townTitle = baseView && hasShelters ? `${area.nameJa}の避難所・避難場所｜災害板` : `${area.nameJa}の災害板`;
+  const townTitleBase = baseView && hasShelters ? `${area.nameJa}の避難所・避難場所` : `${area.nameJa}の災害板`;
+  const townTitle = notoReadOnly
+    ? `${townTitleBase}｜${NOTO_HEAVY_RAIN_DISASTER.label}｜災害板`
+    : baseView && hasShelters
+      ? `${townTitleBase}｜災害板`
+      : townTitleBase;
   const townDescription = baseView && hasShelters
     ? `${disasterPrefix}${area.nameJa}の避難所・避難場所などの場所カードを確認できます。開設状況や営業は公式情報で確認してください。`
     : `${disasterPrefix}${area.nameJa}の場所カードと現地報告を確認できます。公式ではありません。`;
   const unmatchedOfficialStatuses = officialStatuses.filter((status) => !places.some((place) => officialStatusForPlace([status], place)));
   const officialOnly = renderUnmatchedOfficialStatuses(unmatchedOfficialStatuses);
   const sourceStatus = renderUpstreamStatus(origin, slug, upstreamGeneratedAt);
+  const notoReadOnlyNotice = notoReadOnly
+    ? `<div class="caution"><strong>読み取り専用です。</strong> この板は${escapeHtml(NOTO_HEAVY_RAIN_DISASTER.label)}の状況確認用です。現在、投稿は受け付けていません。避難情報・避難所は<a href="${escapeHtml(officialHubUrl(origin, slug))}">OpenNavi</a>と自治体公式情報を優先してください。</div>`
+    : "";
   const tools = `<section class="town-tools" aria-labelledby="town-tools-title">
     <h2 id="town-tools-title">まず探す場所を絞る</h2>
     ${quickNeedLinks ? `<p class="quick-label">今必要な情報から探す</p><nav class="category-filters" aria-label="今必要な情報">${quickNeedLinks}</nav>` : ""}
@@ -531,6 +555,7 @@ export function renderTown(
       <h1>${escapeHtml(area.nameJa)}の災害板</h1>
       <p class="lead">${allowPosting ? "場所の正体に、「いまどうだったか」を書けます。" : hasShelters ? "避難所・避難場所や店舗など、場所ごとのこれまでの報告を確認できます。" : "場所ごとのこれまでの報告を確認できます。"} 投稿は見た時点の話で、公式ではありません。店の営業は地図、避難所の開設は公式ハブで確認してください。</p>
       ${disasterLabel ? `<p class="note">${escapeHtml(disasterLabel)}の場所台帳をもとに表示しています。</p>` : ""}
+      ${notoReadOnlyNotice}
       ${sourceStatus}
       ${tools}
       ${offlineTools(slug, area.nameJa)}
@@ -767,6 +792,7 @@ export function renderPlace(
 ): string {
   const area = meta.areas.find((a) => a.slug === slug);
   const nameJa = area?.nameJa || slug;
+  const notoReadOnly = isNotoReadOnlyArea(slug);
   const mapsUrl = googleMapsSearchUrl(place.name, nameJa, place.address);
   const options = VISITOR_VERDICTS.map(
     (v) => `<option value="${v}">${escapeHtml(VERDICT_LABEL[v])}</option>`,
@@ -808,7 +834,9 @@ export function renderPlace(
     : `<input type="hidden" name="role" value="visitor">`;
   const postingNotice = allowPosting
     ? ""
-    : `<p class="caution">現在は投稿受付を停止しています。最新情報は <a href="${escapeHtml(officialHubUrl(origin, slug))}">公式ハブ</a> で確認してください。</p>`;
+    : notoReadOnly
+      ? `<p class="caution"><strong>読み取り専用です。</strong> ${escapeHtml(NOTO_HEAVY_RAIN_DISASTER.label)}について、現在は投稿を受け付けていません。避難情報・避難所は<a href="${escapeHtml(officialHubUrl(origin, slug))}">OpenNavi</a>と自治体公式情報を優先してください。</p>`
+      : `<p class="caution">現在は投稿受付を停止しています。最新情報は <a href="${escapeHtml(officialHubUrl(origin, slug))}">公式ハブ</a> で確認してください。</p>`;
   const reportForm = allowPosting
     ? `<form method="post" action="/a/${escapeHtml(slug)}/p/${escapeHtml(place.id)}">
         ${ownerFields}
@@ -825,8 +853,10 @@ export function renderPlace(
       </form><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`
     : "";
   return page({
-    title: `${place.name} — ${nameJa}の災害板`,
-    description: `${place.name}のいまどうか。投稿は見た時点の話です。公式ではありません。`,
+    title: notoReadOnly ? `${place.name}｜${NOTO_HEAVY_RAIN_DISASTER.label}｜災害板` : `${place.name} — ${nameJa}の災害板`,
+    description: notoReadOnly
+      ? `${NOTO_HEAVY_RAIN_DISASTER.label}における${nameJa}の${place.name}の場所カードです。読み取り専用で、公式情報はOpenNaviと自治体を優先します。`
+      : `${place.name}のいまどうか。投稿は見た時点の話です。公式ではありません。`,
     canonical: `${site}/a/${slug}/p/${place.id}`,
     origin,
     measurementId,
