@@ -171,7 +171,10 @@ export default {
         return handleOfflineRevision(request, env, origin, offlineRevisionPath[1]);
       }
 
-      const earlyPlacePath = path.match(/^\/a\/([a-z0-9-]+)\/p\/([0-9a-f-]{8,})$/i);
+      // OpenNavi place IDs include both UUIDs and deterministic `seed-...` IDs.
+      // Keep the route bounded to URL-safe lowercase identifiers while allowing
+      // the seed prefix used by the public place master.
+      const earlyPlacePath = path.match(/^\/a\/([a-z0-9-]+)\/p\/([a-z0-9-]{8,})$/i);
       if (earlyPlacePath && request.method === "POST" && !postingEnabledForArea(earlyPlacePath[1])) {
         return redirect(site, `/a/${earlyPlacePath[1]}/p/${earlyPlacePath[2]}`, "現在は投稿受付を停止しています。公式ハブで確認してください。");
       }
@@ -192,7 +195,7 @@ export default {
         return html(renderHome(site, origin, meta, measurementId, url.searchParams.get("pref"), url.searchParams.get("region")));
       }
 
-      const placePath = path.match(/^\/a\/([a-z0-9-]+)\/p\/([0-9a-f-]{8,})$/i);
+      const placePath = path.match(/^\/a\/([a-z0-9-]+)\/p\/([a-z0-9-]{8,})$/i);
       if (placePath) {
         const slug = placePath[1];
         const placeId = placePath[2];

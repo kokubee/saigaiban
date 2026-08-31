@@ -22,7 +22,7 @@ const meta: BoardMeta = {
 };
 
 const place: BoardPlace = {
-  id: "12345678-abcd-4abc-8abc-123456789012",
+  id: "seed-08c110342c2a56de7c638ba373da2e17",
   seed_key: "hakui:test",
   name: "羽咋市役所",
   area: "hakui",
