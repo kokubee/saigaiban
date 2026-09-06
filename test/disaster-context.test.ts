@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   boardMetaForArea,
+  FUKUI_HEAVY_RAIN_DISASTER,
+  FUKUI_HEAVY_RAIN_REGION_ID,
   isNotoReadOnlyArea,
   NOTO_HEAVY_RAIN_DISASTER,
   NOTO_HEAVY_RAIN_REGION_ID,
@@ -13,7 +15,10 @@ import type { BoardMeta, BoardPlace, Env } from "../src/types.ts";
 const meta: BoardMeta = {
   disaster: { id: "r8-chiba-heavy-rain", label: "令和8年8月千葉豪雨" },
   areas: [
-    { slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active", region: { id: "chiba-heavy-rain", label: "千葉県（大雨）", order: 1 } },
+    { slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active", disasterId: "r8-chiba-heavy-rain", region: { id: "chiba-heavy-rain", label: "千葉県（大雨）", order: 1 } },
+    { slug: "fukui", nameJa: "福井市", prefCode: "18", status: "active", disasterId: "r8-fukui-heavy-rain-20260829", region: { id: FUKUI_HEAVY_RAIN_REGION_ID, label: "福井（大雨）", order: 8 } },
+    { slug: "katsuyama", nameJa: "勝山市", prefCode: "18", status: "active", disasterId: "r8-fukui-heavy-rain-20260829", region: { id: FUKUI_HEAVY_RAIN_REGION_ID, label: "福井（大雨）", order: 8 } },
+    { slug: "mashiki", nameJa: "益城町", prefCode: "43", status: "active", disasterId: "r8-kumamoto-earthquake", region: null },
     { slug: "hakui", nameJa: "羽咋市", prefCode: "17", status: "active", region: { id: NOTO_HEAVY_RAIN_REGION_ID, label: "石川・能登（大雨）", order: 7 } },
     { slug: "shika", nameJa: "志賀町", prefCode: "17", status: "active", region: { id: NOTO_HEAVY_RAIN_REGION_ID, label: "石川・能登（大雨）", order: 7 } },
     { slug: "hodatsushimizu", nameJa: "宝達志水町", prefCode: "17", status: "active", region: { id: NOTO_HEAVY_RAIN_REGION_ID, label: "石川・能登（大雨）", order: 7 } },
@@ -43,6 +48,31 @@ test("Noto disaster context is limited to the four approved municipalities", () 
   }
   assert.equal(isNotoReadOnlyArea("mobara"), false);
   assert.equal(boardMetaForArea(meta, "mobara"), meta);
+});
+
+test("Fukui towns use the Fukui heavy-rain identity instead of the Chiba top-level disaster", () => {
+  for (const slug of ["fukui", "katsuyama", "ono", "awara", "sakai", "eiheiji"]) {
+    assert.deepEqual(boardMetaForArea(meta, slug).disaster, FUKUI_HEAVY_RAIN_DISASTER);
+  }
+  assert.deepEqual(boardMetaForArea(meta, "mashiki").disaster, {
+    id: "r8-kumamoto-earthquake",
+    label: "令和8年熊本地震",
+  });
+});
+
+test("town pages for Fukui do not inherit the Chiba heavy-rain label", () => {
+  const fukuiPlace: BoardPlace = {
+    ...place,
+    id: "seed-fukui",
+    seed_key: "fukui:test",
+    name: "福井市役所",
+    area: "fukui",
+    address: "福井県福井市",
+  };
+  const regionalMeta = boardMetaForArea(meta, "fukui");
+  const town = renderTown("https://saigaiban.com", "https://opennavi.org", regionalMeta, "fukui", [fukuiPlace], false, new Map());
+  assert.match(town, /令和8年8月福井大雨/);
+  assert.doesNotMatch(town, /令和8年8月千葉豪雨/);
 });
 
 test("home opens on Noto and preserves the Chiba tab", () => {

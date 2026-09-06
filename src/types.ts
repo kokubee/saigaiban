@@ -18,6 +18,7 @@ export type BoardMeta = {
     nameJa: string;
     prefCode: string;
     status: string;
+    disasterId?: string;
     region?: { id: string; label: string; order: number } | null;
   }>;
   placeLicense?: { osm?: string; gsi?: string };

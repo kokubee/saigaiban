@@ -163,6 +163,7 @@ export async function fetchMeta(origin: string, publicReadCache?: string): Promi
         nameJa: String(a.nameJa || a.slug),
         prefCode: String(a.prefCode || ""),
         status: "active",
+        disasterId: typeof a.disasterId === "string" && a.disasterId.trim() ? a.disasterId.trim() : undefined,
         region:
           a.region && typeof a.region === "object" && typeof a.region.id === "string" && typeof a.region.label === "string"
             ? {
