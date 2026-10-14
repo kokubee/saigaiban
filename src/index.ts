@@ -17,6 +17,7 @@ import {
   fetchOfficialStatuses,
   fetchPlaceById,
   fetchPlaces,
+  officialHubUrl,
   kumamotoResidentSupportUrl,
   officialSupportUrl,
   officialVictimUrl,
@@ -193,6 +194,12 @@ export default {
       }
       if (path === "/") {
         return html(renderHome(site, origin, meta, measurementId, url.searchParams.get("pref"), url.searchParams.get("region")));
+      }
+
+      const archivedTown = path.match(/^\/a\/([a-z0-9-]+)$/);
+      if (archivedTown && !meta.areas.some((area) => area.slug === archivedTown[1])
+        && meta.archivedAreas?.some((area) => area.slug === archivedTown[1])) {
+        return Response.redirect(officialHubUrl(origin, archivedTown[1]), 301);
       }
 
       const placePath = path.match(/^\/a\/([a-z0-9-]+)\/p\/([a-z0-9-]{8,})$/i);
