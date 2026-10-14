@@ -173,6 +173,11 @@ export async function fetchMeta(origin: string, publicReadCache?: string): Promi
               }
             : null,
       })),
+    archivedAreas: Array.isArray(doc.archivedAreas)
+      ? doc.archivedAreas
+          .filter((area) => area && area.status === "archived" && typeof area.slug === "string" && /^[a-z0-9-]+$/.test(area.slug))
+          .map((area) => ({ slug: area.slug, status: "archived" as const }))
+      : [],
     placeLicense: doc.placeLicense,
   };
 }

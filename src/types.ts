@@ -21,6 +21,7 @@ export type BoardMeta = {
     disasterId?: string;
     region?: { id: string; label: string; order: number } | null;
   }>;
+  archivedAreas?: Array<{ slug: string; status: "archived" }>;
   placeLicense?: { osm?: string; gsi?: string };
 };
 

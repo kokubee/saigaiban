@@ -731,6 +731,28 @@ test("legacy Kumamoto entries redirect to the consolidated resident navigator", 
   }
 });
 
+test("archived town URLs permanently redirect to the OpenNavi archive", async () => {
+  const slugs = ["kumamoto-chuo", "kumamoto-higashi", "kumamoto-nishi", "kumamoto-minami", "kumamoto-kita", "mashiki", "mifune"];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    disaster: { id: "r8-chiba-heavy-rain", label: "令和8年千葉県豪雨" },
+    areas: [{ slug: "mobara", nameJa: "茂原市", prefCode: "12", status: "active" }],
+    archivedAreas: slugs.map((slug) => ({ slug, status: "archived" })),
+  }), { headers: { "content-type": "application/json" } });
+  const env = { OPENNAVI_ORIGIN: "https://opennavi.org", SITE_ORIGIN: "https://saigaiban.com" } as unknown as Env;
+  try {
+    for (const slug of slugs) {
+      const response = await worker.fetch(new Request(`https://saigaiban.com/a/${slug}`), env);
+      assert.equal(response.status, 301);
+      assert.equal(response.headers.get("location"), `https://opennavi.org/a/${slug}`);
+    }
+    const unknown = await worker.fetch(new Request("https://saigaiban.com/a/unknown"), env);
+    assert.equal(unknown.status, 404);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Google Maps links search by place name and municipality, never coordinates", () => {
   const url = googleMapsSearchUrl("イオン大網白里店", "大網白里市", "千葉県大網白里市みやこ野1-1");
   assert.match(url, /google\.com\/maps\/search\/\?api=1&query=/);
